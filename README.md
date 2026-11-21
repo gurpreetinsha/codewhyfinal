@@ -151,10 +151,10 @@ If Neo4j is not configured, the demo uses an in-memory graph. The SQLite databas
 
 ~~~bash
 python -m compileall -q app tests
-pytest -q
+python -m pytest -q
 ~~~
 
-GitHub Actions runs compilation, unit tests and an application import check on pushes and pull requests.
+GitHub Actions runs Python compilation, unit tests, frontend JavaScript syntax validation, a Docker image build and an application import check on pushes and pull requests.
 
 ## Data handling and privacy
 
