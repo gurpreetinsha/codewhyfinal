@@ -20,5 +20,9 @@ jobs:
         run: python -m compileall -q app tests
       - name: Run unit tests
         run: python -m pytest -q
-      - name: Check frontend JavaScript syntax\n        run: |\n          python -c "from pathlib import Path; html=Path('static/index.html').read_text(); Path('/tmp/codewhy.js').write_text(html.split('<script>',1)[1].split('</script>',1)[0])"\n          node --check /tmp/codewhy.js\n      - name: Import FastAPI application
+      - name: Check frontend JavaScript syntax
+        run: |
+          python -c "from pathlib import Path; html=Path('static/index.html').read_text(); Path('/tmp/codewhy.js').write_text(html.split('<script>',1)[1].split('</script>',1)[0])"
+          node --check /tmp/codewhy.js
+      - name: Import FastAPI application
         run: python -c "from app.main import app; print(app.title)"
