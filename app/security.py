@@ -12,6 +12,9 @@ import httpx
 SECRET_PATTERNS = [
     ("GitHub personal access token", re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{30,}\b"), "critical"),
     ("AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "critical"),
+    ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"), "high"),
+    ("Stripe live secret", re.compile(r"\bsk_live_[0-9A-Za-z]{20,}\b"), "critical"),
+    ("Environment credential assignment", re.compile(r"(?i)^\s*[A-Z0-9_]*(?:API[_-]?KEY|CLIENT[_-]?SECRET|SECRET[_-]?ACCESS[_-]?KEY|PASSWORD|PASSWD|ACCESS[_-]?TOKEN|AUTH[_-]?TOKEN)\s*=\s*(?!\s*$)(?!\$\{)[A-Za-z0-9_./+=-]{12,}\s*$"), "high"),
     ("Private key material", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"), "critical"),
     ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"), "high"),
     ("JWT-like token", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{8,}\b"), "high"),
