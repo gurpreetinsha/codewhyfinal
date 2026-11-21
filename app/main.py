@@ -215,8 +215,8 @@ def impact_report(graph: dict[str, Any], path: str) -> dict[str, Any]:
 
 async def github_files(owner: str, repo: str, branch: str | None = None, token: str | None = None) -> tuple[dict[str, str], dict[str, Any]]:
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-    if GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    if token or GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {token or GITHUB_TOKEN}"
     async with httpx.AsyncClient(timeout=30, headers=headers, follow_redirects=True) as client:
         meta_resp = await client.get(f"https://api.github.com/repos/{owner}/{repo}")
         if meta_resp.status_code == 404:
