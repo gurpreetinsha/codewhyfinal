@@ -339,6 +339,30 @@ async def ask(repo_id: str, req: AskRequest):
     answer, provider = await sarvam_answer(req.question, context)
     return {"answer": answer, "provider": provider, "evidence": [{"path": e["path"], "lines": e["lines"], "relevance": e["relevance"]} for e in evidence], "disclaimer": "Answers are grounded in the retrieved source excerpts. Static analysis can miss dynamic behaviour and external context."}
 
+@app.get("/api/repos/{repo_id:path}/history")
+async def get_history(repo_id: str, path: str):
+    graph = REPOS.get(repo_id)
+    if not graph or path not in graph["files"]:
+        raise HTTPException(404, "File not found")
+    full_name = graph["metadata"].get("full_name", "")
+    if "/" not in full_name:
+        return {"commits": [], "note": "Commit history is available for connected GitHub repositories."}
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    async with httpx.AsyncClient(timeout=20, headers=headers) as client:
+        response = await client.get(f"https://api.github.com/repos/{full_name}/commits", params={"path": path, "per_page": 8})
+        if response.status_code == 404:
+            return {"commits": [], "note": "No commit history was returned for this file."}
+        if response.status_code >= 400:
+            raise HTTPException(response.status_code, "Could not retrieve file history from GitHub")
+        commits = []
+        for item in response.json():
+            commit = item.get("commit", {})
+            author = commit.get("author") or {}
+            commits.append({"sha": item.get("sha", "")[:8], "message": (commit.get("message") or "").split("\\n")[0], "author": author.get("name", "Unknown"), "date": author.get("date", ""), "url": item.get("html_url", "")})
+        return {"commits": commits, "note": "Commit messages are historical evidence, not guaranteed explanations of original intent."}
+
 @app.get("/api/repos/{repo_id:path}/file")
 async def get_file(repo_id: str, path: str):
     graph = REPOS.get(repo_id)
