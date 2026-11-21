@@ -66,8 +66,10 @@ if AUTH_REQUIRED and not oauth_ready():
 DEMO_FILES = {
     "README.md": "# Atlas Commerce\nA small commerce API demo.\n",
     "src/orders/service.py": "from src.payments.gateway import charge\nfrom src.orders.repository import save_order\n\ndef create_order(user_id, items):\n    total = sum(item['price'] for item in items)\n    payment = charge(user_id, total)\n    return save_order(user_id, items, payment)\n",
-    "src/payments/gateway.py": "def charge(user_id, amount):\n    # TODO: add idempotency key before production rollout\n    return {'user_id': user_id, 'amount': amount, 'status': 'authorized'}\n",
-    "src/orders/repository.py": "def save_order(user_id, items, payment):\n    return {'id': 'ord_demo_001', 'user_id': user_id, 'items': items, 'payment': payment}\n",
+    "src/payments/gateway.py": "def charge(user_id, amount):\n    # TODO: add idempotency key before production rollout
+    return {'user_id': user_id, 'amount': amount, 'status': 'authorized'}\n",
+    "src/orders/repository.py": "def save_order(user_id, items, payment):
+    return {'id': 'ord_demo_001', 'user_id': user_id, 'items': items, 'payment': payment}\n",
     "src/notifications/email.py": "def send_order_confirmation(order):\n    return True\n",
     "tests/test_orders.py": "def test_create_order_persists_payment():\n    assert True\n",
     "src/legacy/pricing.py": "def calculate_discount(customer, total):\n    if customer.get('tier') == 'gold':\n        return total * 0.2\n    return 0\n",
@@ -371,9 +373,12 @@ async def scan(req: ScanRequest, request: Request):
     if not match:
         raise HTTPException(400, "Enter a GitHub repository URL like https://github.com/owner/repo")
     owner, repo = match.groups()
-    user = getattr(request.state, "user", None)\n    files, meta = await github_files(owner, repo, req.branch, user.get("access_token") if user else None)
+    user = getattr(request.state, "user", None)
+    files, meta = await github_files(owner, repo, req.branch, user.get("access_token") if user else None)
     graph = build_graph(rid(owner, repo), files, meta)
     REPOS[graph["id"]] = graph
+    REPO_OWNERS[graph["id"]] = user["login"] if user else "anonymous"
+    audit(user, "repository.scan", graph["id"], f"Loaded {len(files)} files")
     try:
         persist_graph(graph)
     except Exception as exc:
@@ -453,8 +458,10 @@ async def get_history(repo_id: str, path: str, request: Request):
     if "/" not in full_name:
         return {"commits": [], "note": "Commit history is available for connected GitHub repositories."}
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-    if GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    user = getattr(request.state, "user", None)
+    token = user.get("access_token") if user else None
+    if token or GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {token or GITHUB_TOKEN}"
     async with httpx.AsyncClient(timeout=20, headers=headers) as client:
         response = await client.get(f"https://api.github.com/repos/{full_name}/commits", params={"path": path, "per_page": 8})
         if response.status_code == 404:
@@ -476,6 +483,7 @@ async def run_security_scan(repo_id: str, request: Request):
     report = await security_report({p: info["content"] for p, info in graph["files"].items()})
     report["repository"] = graph["metadata"].get("full_name", repo_id)
     report["scanned_at"] = int(time.time())
+    audit(getattr(request.state, "user", None), "security.scan", repo_id, f"{report['summary']['total']} findings")
     return report
 
 @app.post("/api/repos/{repo_id:path}/investigate")
@@ -519,7 +527,10 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
         "note": "This is a traceability check, not proof that every natural-language claim is true. Review the cited source before relying on the conclusion."
     }
     record = {"id": hashlib.sha256(f"{repo_id}:{time.time_ns()}:{req.question}".encode()).hexdigest()[:16], "question": req.question, "answer": answer, "provider": provider, "evidence": evidence, "steps": steps, "verification": verification, "created_at": int(time.time())}
-    user = getattr(request.state, "user", None)\n    save_investigation(repo_id, user.get("id") if user else None, record)\n    audit(user, "investigation.run", repo_id, req.question[:160])\n    INVESTIGATIONS[repo_id].insert(0, record)
+    user = getattr(request.state, "user", None)
+    save_investigation(repo_id, user.get("id") if user else None, record)
+    audit(user, "investigation.run", repo_id, req.question[:160])
+    INVESTIGATIONS[repo_id].insert(0, record)
     INVESTIGATIONS[repo_id] = INVESTIGATIONS[repo_id][:100]
     return record
 
@@ -555,7 +566,8 @@ async def simulate_change(repo_id: str, req: ChangeSimulationRequest, request: R
     context += "\nCURRENT REPOSITORY IMPACT:\n" + json.dumps(impacted)
     context += "\nSTATIC SECURITY PATTERN FINDINGS IN DIFF:\n" + json.dumps(proposed_findings[:30])
     answer, provider = await sarvam_answer("Review this proposed change. Explain behaviour changes, compatibility risks, affected modules, security concerns, and tests to run. Clearly label unknowns. " + req.description, context)
-    audit(getattr(request.state, "user", None), "change.simulate", repo_id, f"{len(changed)} changed paths")\n    return {"description": req.description, "changed_paths": changed, "impact": impacted, "security_findings": proposed_findings, "answer": answer, "provider": provider, "disclaimer": "This is a static preflight review, not execution, formal verification, or a guarantee that the patch is safe."}
+    audit(getattr(request.state, "user", None), "change.simulate", repo_id, f"{len(changed)} changed paths")
+    return {"description": req.description, "changed_paths": changed, "impact": impacted, "security_findings": proposed_findings, "answer": answer, "provider": provider, "disclaimer": "This is a static preflight review, not execution, formal verification, or a guarantee that the patch is safe."}
 
 @app.post("/api/repos/{repo_id:path}/pull-request/review")
 async def review_pull_request(repo_id: str, req: PullRequestReviewRequest, request: Request):
@@ -570,8 +582,10 @@ async def review_pull_request(repo_id: str, req: PullRequestReviewRequest, reque
     if expected and expected != f"{owner}/{repo}".lower():
         raise HTTPException(400, "The pull request must belong to the scanned repository.")
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-    if GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    user = getattr(request.state, "user", None)
+    token = user.get("access_token") if user else None
+    if token or GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {token or GITHUB_TOKEN}"
     async with httpx.AsyncClient(timeout=30, headers=headers) as client:
         response = await client.get(f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}/files", params={"per_page": 100})
         if response.status_code >= 400:
@@ -589,7 +603,8 @@ async def review_pull_request(repo_id: str, req: PullRequestReviewRequest, reque
     impacts = [impact_report(graph, item["path"]) for item in changed if item["path"] in graph["files"]]
     context = "PULL REQUEST FILES:\n" + json.dumps(changed) + "\nDIFF PATCHES:\n" + diff[:20000] + "\nDEPENDENCY IMPACT:\n" + json.dumps(impacts) + "\nSTATIC SECURITY PATTERNS:\n" + json.dumps(findings[:35])
     answer, provider = await sarvam_answer("Act as a cautious senior security-minded code reviewer. Review this pull request for correctness, regressions, security, dependency and test risks. Prioritise actionable findings and cite changed file paths. Do not claim tests ran.", context)
-    audit(getattr(request.state, "user", None), "pull_request.review", repo_id, req.url)\n    return {"pull_request": req.url, "files": changed, "impact": impacts, "security_findings": findings, "review": answer, "provider": provider, "limitations": ["GitHub omits patch text for some large or binary files.", "Only the returned PR file patches are analysed.", "No tests are executed and no merge decision is made automatically."]}
+    audit(getattr(request.state, "user", None), "pull_request.review", repo_id, req.url)
+    return {"pull_request": req.url, "files": changed, "impact": impacts, "security_findings": findings, "review": answer, "provider": provider, "limitations": ["GitHub omits patch text for some large or binary files.", "Only the returned PR file patches are analysed.", "No tests are executed and no merge decision is made automatically."]}
 
 @app.get("/api/repos/{repo_id:path}/file")
 async def get_file(repo_id: str, path: str):
