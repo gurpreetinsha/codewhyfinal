@@ -121,7 +121,8 @@ async function api(url,opts={}){const headers=Object.assign({'Content-Type':'app
 function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',3200)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function setLoading(el,on){el.classList.toggle('loading',on)}
-async function loadDemo(){try{const d=await api('/api/demo');render(d);$('mode-pill').textContent='DEMO WORKSPACE';toast('Demo codebase loaded')}catch(e){toast(e.message)}}
+async function activateWorkspaceTab(name){const button=document.querySelector('.nav button[data-tab="'+name+'"]');if(button)button.click()}
+function loadDemo(){try{const d=await api('/api/demo');render(d);$('mode-pill').textContent='DEMO WORKSPACE';toast('Demo codebase loaded')}catch(e){toast(e.message)}}
 async function loadGitHubRepos(){
   const card=$('github-repos-card');if(!card||!state.authenticated)return;
   card.dataset.connected='true';
@@ -140,6 +141,7 @@ async function loadGitHubRepos(){
   }catch(error){$('github-repo-count').textContent='UNAVAILABLE';$('github-repo-list').innerHTML='<div class="empty">'+esc(error.message)+'</div>'}
 }
 async function scanRepository(fullName,button){
+  activateWorkspaceTab('overview');
   const prior=button.textContent;button.disabled=true;button.textContent='Scanning…';
   try{const result=await api('/api/repos/scan',{method:'POST',body:JSON.stringify({url:fullName})});render(result);if(document.querySelector('.nav button.active')?.dataset.tab==='overview')$('github-repos-card').style.display='';$('mode-pill').textContent='CONNECTED · '+fullName.toUpperCase();$('repo-url').value='https://github.com/'+fullName;toast('Repository analysed successfully');window.scrollTo({top:0,behavior:'smooth'});}
   catch(error){toast(error.message)}
