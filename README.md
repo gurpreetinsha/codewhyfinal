@@ -59,6 +59,20 @@ docker compose up --build
 
 Open http://localhost:8000 and choose Load demo.
 
+### Vercel
+
+The FastAPI application is exported from `app/index.py`, which is a Vercel-supported FastAPI entry point. Connect this repository to Vercel and keep the project **Root Directory** set to the repository root. Vercel detects the FastAPI app automatically; no custom build command or rewrite file is required.
+
+For a public-repository hackathon demo, configure these Project → Settings → Environment Variables:
+
+- `SARVAM_API_KEY`: enables live code explanations, investigations and voice features.
+- `AUTH_REQUIRED`: leave `false` for the no-login public-repository demo.
+- `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`: optional; without them the graph uses the in-memory fallback.
+
+Redeploy after changing environment variables. Check `/api/health` after deployment to see which integrations are configured.
+
+**Vercel demo limitation:** Vercel's writable `/tmp` directory is used for SQLite, but it is temporary and local to an individual function instance. Repository snapshots and graph fallback are also held in process memory. This is acceptable for a single-instance demo flow, but scans, sessions and history are not durable across cold starts or multiple instances. Do not enable authenticated multi-user/private-repository use or treat this as production storage until shared persistent database and source storage are configured. For durable hackathon judging/demo data, use the Docker deployment with a persistent `./data` volume and a configured Neo4j instance.
+
 ### Local Python
 
 Requires Python 3.11+.
