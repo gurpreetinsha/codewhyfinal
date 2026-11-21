@@ -114,7 +114,7 @@ Roles:
 - Reviewer: developer capabilities plus pull-request review.
 - Admin: reviewer capabilities plus audit-event access.
 
-Repository workspaces are namespaced by signed-in GitHub user. API routes enforce the session and repository owner when AUTH_REQUIRED=true. Sessions use HTTP-only cookies, CSRF tokens on write requests, encrypted OAuth tokens at rest, expiry and logout invalidation. Audit events cover sign-in/out, scans, security scans, investigations, change simulations and PR reviews.
+Repository workspaces are namespaced by signed-in GitHub user. API routes enforce the session and repository owner when AUTH_REQUIRED=true. Sessions use HTTP-only cookies, CSRF tokens on write requests, encrypted OAuth tokens at rest, expiry and logout invalidation. Local logout clears the stored token when the user's last session ends; revoke the OAuth App in GitHub Settings → Applications to revoke the provider-side grant. Audit events cover sign-in/out, scans, security scans, investigations, change simulations and PR reviews.
 
 ## Sarvam integration
 
