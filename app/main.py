@@ -65,10 +65,8 @@ if AUTH_REQUIRED and not oauth_ready():
 DEMO_FILES = {
     "README.md": "# Atlas Commerce\nA small commerce API demo.\n",
     "src/orders/service.py": "from src.payments.gateway import charge\nfrom src.orders.repository import save_order\n\ndef create_order(user_id, items):\n    total = sum(item['price'] for item in items)\n    payment = charge(user_id, total)\n    return save_order(user_id, items, payment)\n",
-    "src/payments/gateway.py": "def charge(user_id, amount):\n    # TODO: add idempotency key before production rollout
-    return {'user_id': user_id, 'amount': amount, 'status': 'authorized'}\n",
-    "src/orders/repository.py": "def save_order(user_id, items, payment):
-    return {'id': 'ord_demo_001', 'user_id': user_id, 'items': items, 'payment': payment}\n",
+    "src/payments/gateway.py": "def charge(user_id, amount):\n    # TODO: add idempotency key before production rollout\n    return {'user_id': user_id, 'amount': amount, 'status': 'authorized'}\n",
+    "src/orders/repository.py": "def save_order(user_id, items, payment):\n    return {'id': 'ord_demo_001', 'user_id': user_id, 'items': items, 'payment': payment}\n",
     "src/notifications/email.py": "def send_order_confirmation(order):\n    return True\n",
     "tests/test_orders.py": "def test_create_order_persists_payment():\n    assert True\n",
     "src/legacy/pricing.py": "def calculate_discount(customer, total):\n    if customer.get('tier') == 'gold':\n        return total * 0.2\n    return 0\n",
