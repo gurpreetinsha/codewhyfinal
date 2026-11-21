@@ -31,3 +31,15 @@ def test_dependency_inventory_reads_exact_pins_only():
     assert ("npm", "lodash", "4.17.21") in found
     assert not any(name == "httpx" for _, name, _ in found)
     assert not any(name == "react" for _, name, _ in found)
+
+def test_dependency_inventory_reads_lockfile_versions():
+    files = {
+        "package-lock.json": '{"packages":{"":{"name":"sample"},"node_modules/lodash":{"version":"4.17.21"}}}',
+        "poetry.lock": '[[package]]\nname = "urllib3"\nversion = "2.2.3"\n',
+        "go.sum": "golang.org/x/text v0.15.0 h1:abc\ngolang.org/x/text v0.15.0/go.mod h1:def\n",
+    }
+    dependencies = parse_dependencies(files)
+    found = {(item["ecosystem"], item["name"], item["version"]) for item in dependencies}
+    assert ("npm", "lodash", "4.17.21") in found
+    assert ("PyPI", "urllib3", "2.2.3") in found
+    assert ("Go", "golang.org/x/text", "v0.15.0") in found
