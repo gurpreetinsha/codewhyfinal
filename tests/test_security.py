@@ -43,3 +43,10 @@ def test_dependency_inventory_reads_lockfile_versions():
     assert ("npm", "lodash", "4.17.21") in found
     assert ("PyPI", "urllib3", "2.2.3") in found
     assert ("Go", "golang.org/x/text", "v0.15.0") in found
+
+def test_unquoted_env_secrets_are_redacted():
+    secret = "sk_test_" + "Z" * 28
+    findings = scan_source({".env": "SARVAM_API_KEY=" + secret})
+    assert findings
+    assert secret not in str(findings)
+    assert any(item["severity"] == "high" for item in findings)
