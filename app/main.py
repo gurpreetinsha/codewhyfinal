@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app.security import security_report, scan_source
+from app.security import redact_source, security_report, scan_source
 from app.auth import (AUTH_REQUIRED, CSRF_COOKIE, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI, SESSION_COOKIE, audit, audit_list, create_session, delete_session, get_session, init_auth_db, load_investigations, oauth_ready, save_investigation, valid_csrf)
 
 try:
@@ -202,6 +202,7 @@ def persist_graph(graph: dict[str, Any]) -> None:
             driver.execute_query("MATCH (a:File {id:$source}), (b:Function {id:$target}) MERGE (a)-[:CALLS]->(b)", source=edge["source"], target=edge["target"], database_=NEO4J_DATABASE)
 
 def numbered_excerpt(content: str, max_chars: int) -> str:
+    content = redact_source(content)
     numbered = "\n".join(f"{line_no:04d}: {line}" for line_no, line in enumerate(content.splitlines(), 1))
     return numbered[:max_chars]
 
@@ -502,6 +503,8 @@ async def get_impact(repo_id: str, req: ImpactRequest):
 async def sarvam_answer(question: str, context: str) -> tuple[str, str]:
     if not SARVAM_API_KEY:
         return ("Sarvam AI is not configured yet. Add SARVAM_API_KEY to your deployment environment to enable live answers. The repository evidence is ready and shown alongside this response.", "not_configured")
+    question = redact_source(question)
+    context = redact_source(context)
     system = """You are CODEWHY, a careful staff-level software architect. Answer only from the supplied repository evidence. Clearly distinguish direct evidence from inference. Never invent business intent, runtime behaviour, commit history, tests, or ownership. If the evidence is insufficient, say what is unknown and what additional evidence would establish it. Cite file paths and line numbers where available. Be concise but useful."""
     async with httpx.AsyncClient(timeout=75) as client:
         try:
