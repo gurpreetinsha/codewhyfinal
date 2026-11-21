@@ -251,8 +251,8 @@ async def github_files(owner: str, repo: str, branch: str | None = None, token: 
         if tree_resp.status_code >= 400:
             raise HTTPException(tree_resp.status_code, "Could not read repository tree")
         tree = tree_resp.json().get("tree", [])
-        manifests = {"requirements.txt", "requirements-dev.txt", "requirements.lock", "package.json", "package-lock.json", "poetry.lock", "uv.lock", "cargo.lock", "go.sum"}
-        candidates = [x for x in tree if x.get("type") == "blob" and (PurePosixPath(x["path"]).suffix.lower() in {".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".java", ".rs", ".md"} or PurePosixPath(x["path"]).name.lower() in manifests) and not any(part in {".git", "node_modules", "vendor", "dist", "build", ".next"} for part in x["path"].split("/"))]
+        manifests = {"requirements.txt", "requirements-dev.txt", "requirements.lock", "package.json", "package-lock.json", "poetry.lock", "uv.lock", "cargo.lock", "go.sum", ".env", ".env.local", ".env.production", "application.properties", "secrets.yml", "secrets.yaml"}
+        candidates = [x for x in tree if x.get("type") == "blob" and (PurePosixPath(x["path"]).suffix.lower() in {".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".java", ".rs", ".md", ".yaml", ".yml", ".toml", ".properties"} or PurePosixPath(x["path"]).name.lower() in manifests) and not any(part in {".git", "node_modules", "vendor", "dist", "build", ".next"} for part in x["path"].split("/"))]
         candidates.sort(key=lambda x: 0 if PurePosixPath(x["path"]).name.lower() in manifests else 1)
         candidates = candidates[:MAX_REPO_FILES]
         files: dict[str, str] = {}
