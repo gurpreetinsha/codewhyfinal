@@ -7,13 +7,14 @@ import json
 import os
 import secrets
 import sqlite3
+from contextlib import contextmanager
 import time
 from pathlib import Path
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
-DB_PATH = os.getenv("DATABASE_PATH", "/data/codewhy.sqlite3")
+DB_PATH = os.getenv("DATABASE_PATH", "./data/codewhy.sqlite3")
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() in {"1", "true", "yes", "on"}
 OAUTH_CLIENT_ID = os.getenv("GITHUB_OAUTH_CLIENT_ID", "")
@@ -23,11 +24,19 @@ SESSION_COOKIE = "codewhy_session"
 CSRF_COOKIE = "codewhy_csrf"
 SESSION_TTL = 60 * 60 * 12
 
-def _db() -> sqlite3.Connection:
+@contextmanager
+def _db():
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 def init_auth_db() -> None:
     with _db() as conn:
