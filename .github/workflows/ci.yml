@@ -24,5 +24,7 @@ jobs:
         run: |
           python -c "from pathlib import Path; html=Path('static/index.html').read_text(); Path('/tmp/codewhy.js').write_text(html.split('<script>',1)[1].split('</script>',1)[0])"
           node --check /tmp/codewhy.js
+      - name: Build deployment image
+        run: docker build -t codewhy:ci .
       - name: Import FastAPI application
         run: python -c "from app.main import app; print(app.title)"
