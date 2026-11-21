@@ -6,7 +6,7 @@ CODEWHY is an AI engineering-intelligence and repository-security workspace. It 
 
 ## Product workflow
 
-1. Connect a GitHub repository. Public repositories work without login in demo mode. With GitHub OAuth enabled, a signed-in developer can scan repositories they are authorised to access.
+1. Connect a GitHub repository. With AUTH_REQUIRED=false (the development default), public repositories can be scanned without login. With GitHub OAuth enabled, a signed-in developer can scan repositories they are authorised to access.
 2. Build the engineering graph. Source files, functions, classes, imports and approximate cross-file calls are represented as graph nodes and relationships. Neo4j stores the graph when configured.
 3. Investigate why. Ask CODEWHY or run the Autonomous Investigator. It retrieves likely source files, expands through imports and asks Sarvam to separate observed evidence from inference.
 4. Check security. Sentinel detects credential-like strings, risky code patterns and known vulnerabilities in supported exact-version dependency manifests/lockfiles using OSV.
