@@ -1,4 +1,4 @@
-from app.security import parse_dependencies, scan_source
+from app.security import parse_dependencies, redact_source, scan_source
 
 
 def test_secret_detection_redacts_credential_value():
@@ -50,3 +50,12 @@ def test_unquoted_env_secrets_are_redacted():
     assert findings
     assert secret not in str(findings)
     assert any(item["severity"] == "high" for item in findings)
+
+def test_ai_redaction_masks_entire_private_key_block_and_env_secret():
+    private_key = "-----BEGIN PRIVATE KEY-----\n" + "PRIVATE-MATERIAL-" * 8 + "\n-----END PRIVATE KEY-----"
+    env_secret = "SARVAM_API_KEY=sk_test_" + "Q" * 28
+    safe = redact_source(private_key + "\n" + env_secret)
+    assert "PRIVATE-MATERIAL" not in safe
+    assert "sk_test_" not in safe
+    assert "[REDACTED PRIVATE KEY]" in safe
+    assert "[REDACTED SECRET]" in safe
