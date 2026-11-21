@@ -1,4 +1,6 @@
-from fastapi.testclient import TestClient\n\nfrom app.main import app, attack_path_report, build_graph, impact_report
+from fastapi.testclient import TestClient
+
+from app.main import app, attack_path_report, build_graph, impact_report
 
 
 def test_graph_nodes_are_namespaced_and_impact_is_repo_local():
