@@ -759,10 +759,10 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
         "retrieved_files": [e["path"] for e in evidence],
         "note": "This is a traceability check, not proof that every natural-language claim is true. Review the cited source before relying on the conclusion."
     }
-    record = {"id": hashlib.sha256(f"{repo_id}:{time.time_ns()}:{req.question}".encode()).hexdigest()[:16], "question": req.question, "answer": answer, "provider": provider, "evidence": evidence, "steps": steps, "verification": verification, "created_at": int(time.time())}
+    record = {"id": hashlib.sha256(f"{repo_id}:{time.time_ns()}:{req.question}".encode()).hexdigest()[:16], "question": redact_source(req.question), "answer": answer, "provider": provider, "evidence": evidence, "steps": steps, "verification": verification, "created_at": int(time.time())}
     user = getattr(request.state, "user", None)
     save_investigation(repo_id, user.get("id") if user else None, record)
-    audit(user, "investigation.run", repo_id, req.question[:160])
+    audit(user, "investigation.run", repo_id, redact_source(req.question)[:160])
     INVESTIGATIONS[repo_id].insert(0, record)
     INVESTIGATIONS[repo_id] = INVESTIGATIONS[repo_id][:100]
     return record
