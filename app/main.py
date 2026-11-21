@@ -156,7 +156,7 @@ def build_graph(repo_id: str, files: dict[str, str], metadata: dict[str, Any] | 
         for cls in info["classes"]:
             nid = f"class:{repo_id}:{path}:{cls['name']}"
             nodes.append({"id": nid, "label": cls["name"], "type": "class", "path": path, "line": cls["line"]})
-            edges.append({"source": fid, "target": nid, "type": "DEFINES"})
+            edges.append({"source": fid, "target": nid, "type": "DEFINES", "source_path": path, "target_path": path})
     for path, info in parsed.items():
         for module in info["imports"]:
             target = _resolve_import(path, module, known)
@@ -665,8 +665,8 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
     evidence_paths = {p for _, p, _ in selected}
     for edge in graph["edges"]:
         if edge["type"] == "IMPORTS":
-            src = edge["source"].removeprefix("file:")
-            dst = edge["target"].removeprefix("file:")
+            src = edge.get("source_path", edge["source"].removeprefix("file:"))
+            dst = edge.get("target_path", edge["target"].removeprefix("file:"))
             if src in evidence_paths or dst in evidence_paths:
                 evidence_paths.update((src, dst))
     evidence_paths = set(list(evidence_paths)[:9])
