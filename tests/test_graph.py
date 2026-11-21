@@ -43,3 +43,7 @@ def test_demo_routes_and_security_scan_work_end_to_end():
     security = client.post("/api/repos/" + repo_id + "/security/scan")
     assert security.status_code == 200
     assert "attack_paths" in security.json()
+    assert security.json()["timeline_delta"]["new_count"] >= 0
+    timeline = client.get("/api/repos/" + repo_id + "/security/history")
+    assert timeline.status_code == 200
+    assert len(timeline.json()["items"]) >= 1
