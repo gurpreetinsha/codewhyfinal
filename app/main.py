@@ -124,22 +124,22 @@ def build_graph(repo_id: str, files: dict[str, str], metadata: dict[str, Any] | 
     nodes, edges = [], []
     file_to_functions: dict[str, list[str]] = defaultdict(list)
     for path, info in parsed.items():
-        fid = f"file:{path}"
+        fid = f"file:{repo_id}:{path}"
         nodes.append({"id": fid, "label": PurePosixPath(path).name, "type": "file", "path": path, "language": info["language"], "lines": info["lines"]})
         for fn in info["functions"]:
-            nid = f"fn:{path}:{fn['name']}"
+            nid = f"fn:{repo_id}:{path}:{fn['name']}"
             file_to_functions[path].append(nid)
             nodes.append({"id": nid, "label": fn["name"], "type": "function", "path": path, "line": fn["line"], "args": fn["args"]})
-            edges.append({"source": fid, "target": nid, "type": "DEFINES"})
+            edges.append({"source": fid, "target": nid, "type": "DEFINES", "source_path": path, "target_path": path})
         for cls in info["classes"]:
-            nid = f"class:{path}:{cls['name']}"
+            nid = f"class:{repo_id}:{path}:{cls['name']}"
             nodes.append({"id": nid, "label": cls["name"], "type": "class", "path": path, "line": cls["line"]})
             edges.append({"source": fid, "target": nid, "type": "DEFINES"})
     for path, info in parsed.items():
         for module in info["imports"]:
             target = _resolve_import(path, module, known)
             if target and target != path:
-                edges.append({"source": f"file:{path}", "target": f"file:{target}", "type": "IMPORTS"})
+                edges.append({"source": f"file:{repo_id}:{path}", "target": f"file:{repo_id}:{target}", "type": "IMPORTS", "source_path": path, "target_path": target})
     # Approximate call links across known function names; marked as syntactic evidence.
     function_index = defaultdict(list)
     for path, info in parsed.items():
@@ -149,7 +149,7 @@ def build_graph(repo_id: str, files: dict[str, str], metadata: dict[str, Any] | 
         for call in set(info["calls"]):
             for target_path, fn in function_index.get(call, []):
                 if target_path != path:
-                    edges.append({"source": f"file:{path}", "target": f"fn:{target_path}:{call}", "type": "CALLS"})
+                    edges.append({"source": f"file:{repo_id}:{path}", "target": f"fn:{repo_id}:{target_path}:{call}", "type": "CALLS", "source_path": path, "target_path": target_path})
     stats = {
         "files": len(parsed),
         "functions": sum(len(x["functions"]) for x in parsed.values()),
@@ -166,7 +166,7 @@ def persist_graph(graph: dict[str, Any]) -> None:
         return
     repo_id = graph["id"]
     driver.execute_query("MERGE (r:Repository {id:$id}) SET r.name=$name, r.scanned_at=$scanned_at", id=repo_id, name=graph["metadata"].get("full_name", repo_id), scanned_at=graph["scanned_at"], database_=NEO4J_DATABASE)
-    driver.execute_query("MATCH (r:Repository {id:$id}) OPTIONAL MATCH (r)-[rel:CONTAINS]->(f:File) DETACH DELETE f", id=repo_id, database_=NEO4J_DATABASE)
+    driver.execute_query("MATCH (r:Repository {id:$id})-[:CONTAINS]->(f:File) OPTIONAL MATCH (f)-[:DEFINES]->(n) WITH collect(DISTINCT f) + collect(DISTINCT n) AS stale UNWIND stale AS node DETACH DELETE node", id=repo_id, database_=NEO4J_DATABASE)
     for node in graph["nodes"]:
         if node["type"] == "file":
             driver.execute_query("MATCH (r:Repository {id:$repo}) MERGE (f:File {id:$id}) SET f.path=$path, f.label=$label, f.language=$language, f.lines=$lines MERGE (r)-[:CONTAINS]->(f)", repo=repo_id, id=node["id"], path=node["path"], label=node["label"], language=node["language"], lines=node["lines"], database_=NEO4J_DATABASE)
@@ -203,7 +203,7 @@ def impact_report(graph: dict[str, Any], path: str) -> dict[str, Any]:
     reverse = defaultdict(set)
     for e in graph["edges"]:
         if e["type"] == "IMPORTS":
-            reverse[e["target"].removeprefix("file:")].add(e["source"].removeprefix("file:"))
+            reverse[e.get("target_path", e["target"].removeprefix("file:"))].add(e.get("source_path", e["source"].removeprefix("file:")) )
     seen, queue = set(), [path]
     while queue:
         cur = queue.pop(0)
@@ -505,7 +505,7 @@ def attack_path_report(graph: dict[str, Any], findings: list[dict[str, Any]]) ->
     adjacency = defaultdict(set)
     for edge in graph["edges"]:
         if edge["type"] == "IMPORTS":
-            adjacency[edge["source"].removeprefix("file:")].add(edge["target"].removeprefix("file:"))
+            adjacency[edge.get("source_path", edge["source"].removeprefix("file:"))].add(edge.get("target_path", edge["target"].removeprefix("file:")) )
     paths = []
     for source in sorted(sources):
         queue = [(source, [source])]
@@ -605,7 +605,7 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
                 evidence_paths.update((src, dst))
     evidence_paths = set(list(evidence_paths)[:9])
     evidence = [{"path": p, "lines": graph["files"][p]["lines"], "excerpt": graph["files"][p]["content"][:1800]} for p in sorted(evidence_paths) if p in graph["files"]]
-    graph_edges = [e for e in graph["edges"] if e["source"].removeprefix("file:") in evidence_paths or e["target"].removeprefix("file:") in evidence_paths][:35]
+    graph_edges = [e for e in graph["edges"] if e.get("source_path") in evidence_paths or e.get("target_path") in evidence_paths][:35]
     context = "\n\n".join(f"FILE: {e['path']} ({e['lines']} lines)\n{e['excerpt']}" for e in evidence)
     context += "\nGRAPH RELATIONSHIPS (static-analysis evidence):\n" + json.dumps(graph_edges[:35])
     steps = [
