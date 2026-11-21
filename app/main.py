@@ -375,7 +375,7 @@ async def auth_and_tenant_middleware(request: Request, call_next):
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "CSRF validation failed. Refresh and try again."}, status_code=403)
     for repo_id, owner in REPO_OWNERS.items():
-        if path.startswith("/api/repos/" + repo_id + "/"):
+        if path == "/api/repos/" + repo_id or path.startswith("/api/repos/" + repo_id + "/"):
             if owner.startswith("anon:"):
                 if user or owner != "anon:" + anon_id:
                     from fastapi.responses import JSONResponse
@@ -451,6 +451,42 @@ async def auth_logout(request: Request):
     response.delete_cookie(SESSION_COOKIE, path="/")
     response.delete_cookie(CSRF_COOKIE, path="/")
     return response
+
+@app.get("/api/github/repos")
+async def github_repositories(request: Request, page: int = 1, per_page: int = 100):
+    """List repositories visible to the signed-in GitHub account."""
+    user = getattr(request.state, "user", None)
+    if not user or not user.get("access_token"):
+        raise HTTPException(401, "Sign in with GitHub to list your repositories.")
+    page = max(1, min(page, 100))
+    per_page = max(1, min(per_page, 100))
+    headers = {
+        "Authorization": f"Bearer {user['access_token']}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    async with httpx.AsyncClient(timeout=25, headers=headers) as client:
+        response = await client.get(
+            "https://api.github.com/user/repos",
+            params={"visibility": "all", "affiliation": "owner,collaborator,organization_member",
+                    "sort": "updated", "per_page": per_page, "page": page},
+        )
+    if response.status_code == 401:
+        raise HTTPException(401, "GitHub access expired. Sign in again.")
+    if response.status_code == 403:
+        raise HTTPException(403, "GitHub denied repository listing. Check OAuth repository permissions or organisation approval.")
+    if response.status_code >= 400:
+        raise HTTPException(response.status_code, "Could not list GitHub repositories.")
+    repos = response.json()
+    return {"repositories": [{
+        "id": item["id"], "full_name": item["full_name"], "name": item["name"],
+        "description": item.get("description"), "private": item.get("private", False),
+        "default_branch": item.get("default_branch", "main"), "language": item.get("language"),
+        "stargazers_count": item.get("stargazers_count", 0),
+        "html_url": item.get("html_url"), "updated_at": item.get("updated_at"),
+        "permissions": {"push": bool((item.get("permissions") or {}).get("push")),
+                        "admin": bool((item.get("permissions") or {}).get("admin"))},
+    } for item in repos], "page": page, "per_page": per_page}
 
 @app.get("/api/admin/audit")
 async def get_audit(request: Request, limit: int = 100):
