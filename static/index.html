@@ -138,7 +138,7 @@ $('repo-nav').addEventListener('click',()=>{$('repo-url').scrollIntoView({behavi
     });
     if(name==='graph'&&layout){layout.style.display='grid';layout.style.gridTemplateColumns='minmax(0,1fr) minmax(260px,.65fr)';if(rightcol)rightcol.style.display='grid';if(debtCard)debtCard.style.display='none';if(filesCard)filesCard.style.display='';}
     if(name==='debt'&&layout){layout.style.display='grid';layout.style.gridTemplateColumns='minmax(0,1fr)';if(rightcol)rightcol.style.display='grid';if(debtCard)debtCard.style.display='';if(filesCard)filesCard.style.display='none';}
-    nav.forEach(button=>button.classList.toggle('active',button.dataset.tab===name));
+    nav.forEach(button=>{const active=button.dataset.tab===name;button.classList.toggle('active',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current')});
     const labels={overview:'OVERVIEW',graph:'CODE GRAPH',debt:'TECHNICAL DEBT',ask:'ASK CODEWHY',security:'SECURITY CENTER',investigate:'AUTONOMOUS INVESTIGATOR',pr:'PR RISK REVIEWER',change:'CHANGE SIMULATOR',history:'HISTORY & REPORTS'};
     const crumb=document.querySelector('.crumb span');if(crumb)crumb.textContent=labels[name]||'OVERVIEW';
     if(name==='ask')$('question')?.focus();
