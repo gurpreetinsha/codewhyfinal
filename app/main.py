@@ -56,6 +56,7 @@ if NEO4J_URI and NEO4J_PASSWORD and GraphDatabase:
 REPOS: dict[str, dict[str, Any]] = {}
 INVESTIGATIONS: dict[str, list[dict[str, Any]]] = defaultdict(list)
 REPO_OWNERS: dict[str, str] = {}
+SECURITY_REPORTS: dict[str, dict[str, Any]] = {}
 RATE_BUCKETS: dict[str, list[float]] = defaultdict(list)
 OAUTH_STATES: dict[str, int] = {}
 init_auth_db()
@@ -385,7 +386,8 @@ async def auth_logout(request: Request):
     user = getattr(request.state, "user", None)
     delete_session(request.cookies.get(SESSION_COOKIE, ""))
     audit(user, "auth.logout")
-    response = RedirectResponse("/", status_code=303)
+    from fastapi.responses import JSONResponse
+    response = JSONResponse({"status": "logged_out"})
     response.delete_cookie(SESSION_COOKIE, path="/")
     response.delete_cookie(CSRF_COOKIE, path="/")
     return response
@@ -605,6 +607,7 @@ async def run_security_scan(repo_id: str, request: Request):
     report["repository"] = graph["metadata"].get("full_name", repo_id)
     report["attack_paths"] = attack_path_report(graph, report["findings"])
     report["scanned_at"] = int(time.time())
+    SECURITY_REPORTS[repo_id] = report
     audit(getattr(request.state, "user", None), "security.scan", repo_id, f"{report['summary']['total']} findings")
     return report
 
@@ -673,6 +676,7 @@ async def repository_report(repo_id: str):
         "statistics": graph["stats"],
         "technical_debt": debt_report(graph),
         "investigations": load_investigations(repo_id, 20),
+        "security": SECURITY_REPORTS.get(repo_id),
         "limitations": ["Static analysis cannot establish runtime exploitability.", "Dependency checks cover supported exact-version manifests and the OSV database.", "Dynamic imports and external runtime configuration may be missed."]
     }
 
