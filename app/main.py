@@ -360,7 +360,7 @@ async def get_history(repo_id: str, path: str):
         for item in response.json():
             commit = item.get("commit", {})
             author = commit.get("author") or {}
-            commits.append({"sha": item.get("sha", "")[:8], "message": (commit.get("message") or "").split("\\n")[0], "author": author.get("name", "Unknown"), "date": author.get("date", ""), "url": item.get("html_url", "")})
+            commits.append({"sha": item.get("sha", "")[:8], "message": (commit.get("message") or "").splitlines()[0], "author": author.get("name", "Unknown"), "date": author.get("date", ""), "url": item.get("html_url", "")})
         return {"commits": commits, "note": "Commit messages are historical evidence, not guaranteed explanations of original intent."}
 
 @app.get("/api/repos/{repo_id:path}/file")
