@@ -544,6 +544,14 @@ async def ask(repo_id: str, req: AskRequest):
     persisted_context = neo4j_graph_context(repo_id, {e["path"] for e in evidence})
     if persisted_context:
         context += "\nNEO4J GRAPH NEIGHBOURHOOD:\n" + json.dumps(persisted_context)
+    security_terms = {"security", "vulnerability", "vulnerable", "secret", "attack", "injection", "token", "credential", "exploit"}
+    if security_terms.intersection(set(terms)):
+        security_data = SECURITY_REPORTS.get(repo_id)
+        if not security_data:
+            security_data = await security_report({p: info["content"] for p, info in graph["files"].items()})
+            security_data["attack_paths"] = attack_path_report(graph, security_data["findings"])
+            SECURITY_REPORTS[repo_id] = security_data
+        context += "\nRELATED SECURITY FINDINGS:\n" + json.dumps([item for item in security_data["findings"] if item.get("path") in {e["path"] for e in evidence} or item.get("category") == "dependency"][:25])
     answer, provider = await sarvam_answer(req.question, context)
     return {"answer": answer, "provider": provider, "evidence": [{"path": e["path"], "lines": e["lines"], "relevance": e["relevance"]} for e in evidence], "disclaimer": "Answers are grounded in the retrieved source excerpts. Static analysis can miss dynamic behaviour and external context."}
 
