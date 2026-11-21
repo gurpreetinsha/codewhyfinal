@@ -37,6 +37,14 @@ def _mask(value: str) -> str:
         return "*" * len(value)
     return value[:4] + "…" + value[-3:]
 
+PRIVATE_KEY_BLOCK = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?(?:-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|$)")
+
+def redact_source(content: str) -> str:
+    content = PRIVATE_KEY_BLOCK.sub("[REDACTED PRIVATE KEY]", content)
+    for _, pattern, _ in SECRET_PATTERNS:
+        content = pattern.sub("[REDACTED SECRET]", content)
+    return content
+
 def scan_source(files: dict[str, str]) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     seen: set[tuple[str, int, str]] = set()
