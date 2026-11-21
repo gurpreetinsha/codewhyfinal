@@ -68,6 +68,16 @@ def init_auth_db() -> None:
         );
         CREATE INDEX IF NOT EXISTS audit_created_idx ON audit_events(created_at);
         CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);
+        CREATE TABLE IF NOT EXISTS security_scans (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          repo_id TEXT NOT NULL,
+          user_id INTEGER,
+          created_at INTEGER NOT NULL,
+          summary_json TEXT NOT NULL,
+          findings_json TEXT NOT NULL,
+          delta_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS security_scans_repo_idx ON security_scans(repo_id, created_at);
         """)
 
 def _fernet() -> Fernet:
@@ -172,3 +182,47 @@ def load_investigations(repo_id: str, limit: int = 100) -> list[dict[str, Any]]:
         )""")
         rows = conn.execute("SELECT payload FROM investigations WHERE repo_id=? ORDER BY created_at DESC LIMIT ?", (repo_id, limit)).fetchall()
     return [json.loads(row["payload"]) for row in rows]
+
+
+def save_security_scan(repo_id: str, user_id: int | None, report: dict[str, Any]) -> dict[str, Any]:
+    created_at = int(report.get("scanned_at") or time.time())
+    current = report.get("findings", [])
+    def key(item: dict[str, Any]) -> str:
+        return item.get("fingerprint") or hashlib.sha256(
+            f"{item.get('path','')}|{item.get('title','')}|{item.get('category','')}".encode()
+        ).hexdigest()
+    current_map = {key(item): item for item in current}
+    with _db() as conn:
+        previous = conn.execute(
+            "SELECT findings_json,created_at FROM security_scans WHERE repo_id=? ORDER BY id DESC LIMIT 1",
+            (repo_id,)
+        ).fetchone()
+        previous_items = json.loads(previous["findings_json"]) if previous else []
+        previous_map = {key(item): item for item in previous_items}
+        new_items = [current_map[fingerprint] for fingerprint in current_map.keys() - previous_map.keys()]
+        resolved_items = [previous_map[fingerprint] for fingerprint in previous_map.keys() - current_map.keys()]
+        delta = {
+            "new_count": len(new_items),
+            "resolved_count": len(resolved_items),
+            "unchanged_count": len(current_map.keys() & previous_map.keys()),
+            "new": [{"path": x.get("path"), "title": x.get("title"), "severity": x.get("severity")} for x in new_items[:50]],
+            "resolved": [{"path": x.get("path"), "title": x.get("title"), "severity": x.get("severity")} for x in resolved_items[:50]],
+            "previous_scan_at": previous["created_at"] if previous else None,
+        }
+        conn.execute(
+            "INSERT INTO security_scans(repo_id,user_id,created_at,summary_json,findings_json,delta_json) VALUES(?,?,?,?,?,?)",
+            (repo_id, user_id, created_at, json.dumps(report.get("summary", {})), json.dumps(current), json.dumps(delta))
+        )
+    return delta
+
+
+def load_security_scans(repo_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT created_at,summary_json,delta_json FROM security_scans WHERE repo_id=? ORDER BY id DESC LIMIT ?",
+            (repo_id, min(max(limit, 1), 100))
+        ).fetchall()
+    return [
+        {"created_at": row["created_at"], "summary": json.loads(row["summary_json"]), "delta": json.loads(row["delta_json"])}
+        for row in rows
+    ]
