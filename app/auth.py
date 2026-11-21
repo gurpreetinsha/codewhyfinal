@@ -14,7 +14,13 @@ from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
-DB_PATH = os.getenv("DATABASE_PATH") or ("/tmp/codewhy.sqlite3" if os.getenv("VERCEL") else "./data/codewhy.sqlite3")
+_configured_db_path = os.getenv("DATABASE_PATH", "")
+# Vercel Functions have a read-only deployment filesystem; only /tmp is writable.
+# SQLite in /tmp is suitable for a demo, but is ephemeral and not shared across instances.
+DB_PATH = (
+    _configured_db_path if _configured_db_path.startswith("/tmp/")
+    else "/tmp/codewhy.sqlite3"
+) if os.getenv("VERCEL") else (_configured_db_path or "./data/codewhy.sqlite3")
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() in {"1", "true", "yes", "on"}
 OAUTH_CLIENT_ID = os.getenv("GITHUB_OAUTH_CLIENT_ID", "")
