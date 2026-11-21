@@ -20,24 +20,57 @@
 .main > .hero,.main > .connect,.main > .stats,.main > .layout,.main > #ask-card,.main > .feature-section{transition:opacity .15s ease}
 .main > .layout{margin-top:4px}
 @media(max-width:680px){.main > .layout{grid-template-columns:1fr!important}}
+/* Overview directory and commit history */
+.overview-intro{margin:4px 0 18px;color:var(--muted);font-size:12px;line-height:1.75;max-width:850px}
+.feature-directory{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 18px}
+.feature-tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;min-height:154px}
+.feature-tile .tile-kicker{font:9px var(--mono);letter-spacing:1px;color:var(--cyan);text-transform:uppercase;margin-bottom:9px}
+.feature-tile h3{font-size:13px;margin:0 0 7px}
+.feature-tile p{color:var(--muted);font-size:11px;line-height:1.6;margin:0 0 13px;flex:1}
+.feature-tile button{align-self:flex-start}
+.commit-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.commit-toolbar input{max-width:300px}
+.commit-list{padding:4px 18px 14px}
+.commit-row{padding:14px 0;border-bottom:1px solid #202733;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}
+.commit-row:last-child{border:0}
+.commit-row strong{font-size:12px;line-height:1.5;display:block}
+.commit-row p{margin:5px 0;color:var(--muted);font-size:10px;line-height:1.5}
+.commit-row a{color:var(--cyan);font:10px var(--mono);text-decoration:none}
+.commit-row a:hover{color:var(--lime)}
+.commit-meta{color:#8794a7;font:10px var(--mono);text-align:right;white-space:nowrap}
+@media(max-width:900px){.feature-directory{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.feature-directory{grid-template-columns:1fr}.commit-row{grid-template-columns:1fr}.commit-meta{text-align:left}}
+
 </style></head>
 <body>
 <div class="shell">
 <aside class="sidebar">
 <div class="brand"><div class="mark">C.</div>CODE<span>WHY</span></div>
-<div><div class="side-label">WORKSPACE</div><nav class="nav"><button class="active" data-tab="overview"><span class="ico">◈</span>Overview</button><button data-tab="graph"><span class="ico">⌘</span>Code graph</button><button data-tab="debt"><span class="ico">◉</span>Technical debt</button><button data-tab="ask"><span class="ico">✳</span>Ask CODEWHY</button><button data-tab="security"><span class="ico">⌑</span>Security center</button><button data-tab="investigate"><span class="ico">◎</span>Autonomous investigator</button><button data-tab="pr"><span class="ico">⇄</span>PR risk reviewer</button><button data-tab="change"><span class="ico">⌁</span>Change simulator</button><button data-tab="history"><span class="ico">◷</span>History & reports</button><button data-tab="security"><span class="ico">⌑</span>Security center</button><button data-tab="investigate"><span class="ico">◎</span>Autonomous investigator</button><button data-tab="pr"><span class="ico">⇄</span>PR risk reviewer</button><button data-tab="change"><span class="ico">⌁</span>Change simulator</button><button data-tab="history"><span class="ico">◷</span>History & reports</button></nav></div>
+<div><div class="side-label">WORKSPACE</div><nav class="nav"><button class="active" data-tab="overview"><span class="ico">◈</span>Overview</button><button data-tab="graph"><span class="ico">⌘</span>Code graph</button><button data-tab="debt"><span class="ico">◉</span>Technical debt</button><button data-tab="ask"><span class="ico">✳</span>Ask CODEWHY</button><button data-tab="security"><span class="ico">⌑</span>Security center</button><button data-tab="investigate"><span class="ico">◎</span>Autonomous investigator</button><button data-tab="pr"><span class="ico">⇄</span>PR risk reviewer</button><button data-tab="change"><span class="ico">⌁</span>Change simulator</button><button data-tab="history"><span class="ico">◷</span>History & reports</button><button data-tab="commits"><span class="ico">⎇</span>Commit history</button></nav></div>
 <div><div class="side-label">YOUR REPOSITORIES</div><nav class="nav"><button id="repo-nav"><span class="ico">⌁</span><span id="repo-name">Atlas Commerce</span></button></nav></div>
 <div class="side-bottom"><div class="status"><strong><span class="dot"></span>System operational</strong><div id="sys-status">Checking integrations…</div><div style="margin-top:8px">CODEWHY v1.0 · Hackathon build</div></div></div>
 </aside>
 <main class="main">
 <header class="top"><div class="crumb">WORKSPACE / <span style="color:#dce5f0">OVERVIEW</span></div><div class="topright"><span class="pill" id="mode-pill">DEMO WORKSPACE</span><button class="btn" id="auth-action" style="display:none;padding:7px 10px">Sign in</button><div class="avatar" id="avatar">G</div></div></header>
-<section class="hero"><div><div class="eyebrow">Codebase intelligence, not guesswork</div><h1>Know your code.<br><span style="color:var(--lime)">Know the why.</span></h1><p>Map the moving parts, uncover hidden dependencies, and ask the questions your code never documented.</p></div><div class="actions"><button class="btn" id="demo-btn">↗ Load demo</button><button class="btn primary" onclick="document.getElementById('repo-url').focus()">＋ Connect repository</button></div></section>
-<section class="connect"><div class="spark">✳</div><div class="connect-copy"><strong>Bring a codebase into focus</strong><small>Connect a GitHub repository to map its architecture in seconds.</small></div><div class="connect-form"><input id="repo-url" placeholder="https://github.com/owner/repository"><button class="btn primary" id="scan-btn">Scan repo →</button></div></section>
-<section class="card" id="github-repos-card" style="display:none;margin-bottom:18px">
+<section class="hero" data-overview-only><div><div class="eyebrow">Codebase intelligence, not guesswork</div><h1>Know your code.<br><span style="color:var(--lime)">Know the why.</span></h1><p>Map the moving parts, uncover hidden dependencies, and ask the questions your code never documented.</p></div><div class="actions"><button class="btn" id="demo-btn">↗ Load demo</button><button class="btn primary" onclick="document.getElementById('repo-url').focus()">＋ Connect repository</button></div></section>
+<section class="connect" data-overview-only><div class="spark">✳</div><div class="connect-copy"><strong>Bring a codebase into focus</strong><small>Connect a GitHub repository to map its architecture in seconds.</small></div><div class="connect-form"><input id="repo-url" placeholder="https://github.com/owner/repository"><button class="btn primary" id="scan-btn">Scan repo →</button></div></section>
+<section class="card" id="github-repos-card" data-overview-only style="display:none;margin-bottom:18px">
   <div class="card-head"><h2>Your GitHub repositories</h2><small id="github-repo-count">LOADING</small><button class="btn" id="refresh-repos-btn" style="padding:6px 10px">Refresh</button></div>
   <div id="github-repo-list" class="debt-list"><div class="empty">Sign in with GitHub to list repositories you can access.</div></div>
 </section>
-<section class="stats">
+<p class="overview-intro" data-overview-only>CODEWHY turns a repository into an explorable engineering workspace. Start with the architecture and repository health, then jump directly into focused tools for security, dependency risk, investigations, code questions and change review. Each tool has its own dedicated workspace so the Overview stays a useful launchpad instead of becoming one endless dashboard.</p>
+<section class="feature-directory" id="feature-directory" data-overview-only>
+  <article class="feature-tile"><div class="tile-kicker">01 · Understand</div><h3>Code graph</h3><p>Explore files, functions, classes and detected relationships to understand how the codebase is connected.</p><button class="btn" data-go-tab="graph">Explore architecture →</button></article>
+  <article class="feature-tile"><div class="tile-kicker">02 · Prioritise</div><h3>Technical debt</h3><p>Review maintainability signals such as oversized files, long functions and TODO/FIXME markers.</p><button class="btn" data-go-tab="debt">Review debt →</button></article>
+  <article class="feature-tile"><div class="tile-kicker">03 · Ask</div><h3>Ask CODEWHY</h3><p>Ask natural-language questions about behaviour and get answers grounded in retrieved source evidence.</p><button class="btn" data-go-tab="ask">Ask a question →</button></article>
+  <article class="feature-tile"><div class="tile-kicker">04 · Protect</div><h3>Security center</h3><p>Run Sentinel checks for exposed secrets, risky patterns, dependency advisories and possible attack paths.</p><button class="btn" data-go-tab="security">Open Sentinel →</button></article>
+  <article class="feature-tile"><div class="tile-kicker">05 · Investigate</div><h3>Autonomous investigator</h3><p>Trace a question through related files and dependencies, with an evidence trail for the result.</p><button class="btn" data-go-tab="investigate">Start investigation →</button></article>
+  <article class="feature-tile"><div class="tile-kicker">06 · Review</div><h3>PR risk reviewer</h3><p>Inspect changed files, dependency impact and static risk signals before a pull request is merged.</p><button class="btn" data-go-tab="pr">Review a PR →</button></article>
+  <article class="feature-tile"><div class="tile-kicker">07 · Predict</div><h3>Change simulator</h3><p>Run a static pre-merge review of a proposed diff to surface likely impact and security concerns.</p><button class="btn" data-go-tab="change">Simulate a change →</button></article>
+  <article class="feature-tile"><div class="tile-kicker">08 · Learn</div><h3>History & reports</h3><p>Revisit saved investigations, security scan history and exportable repository reports.</p><button class="btn" data-go-tab="history">View reports →</button></article>
+  <article class="feature-tile"><div class="tile-kicker">09 · Audit</div><h3>Commit history checker</h3><p>Inspect recent repository commits, authors, timestamps and file-level change summaries. Open any commit on GitHub for the full diff.</p><button class="btn" data-go-tab="commits">Check commits →</button></article>
+</section>
+<section class="stats" data-overview-only>
 <div class="stat"><label>Source files</label><strong id="s-files">—</strong><small>Across the repository</small></div><div class="stat"><label>Functions</label><strong id="s-functions">—</strong><small>Detected definitions</small></div><div class="stat"><label>Relationships</label><strong id="s-edges">—</strong><small>Imports + definitions + calls</small></div><div class="stat"><label>Debt signals</label><strong id="s-debt">—</strong><small>Heuristic findings</small></div>
 </section>
 <section class="layout">
@@ -63,6 +96,10 @@
 <section class="card feature-section" id="change-section">
 <div class="card-head"><h2>Change simulator</h2><small>PRE-MERGE PREFLIGHT</small></div>
 <div class="feature-body"><p>Paste a unified Git diff and describe the proposed change. CODEWHY will inspect changed paths, existing dependencies and security patterns.</p><input id="change-description" placeholder="What are you changing and why?"><textarea id="change-diff" rows="7" placeholder="diff --git a/src/example.py b/src/example.py&#10;--- a/src/example.py&#10;+++ b/src/example.py&#10;@@ ..."></textarea><div class="feature-actions"><button class="btn primary" id="change-btn">Simulate change →</button><span class="muted-note">Static review only — no code is executed.</span></div><div id="change-result" class="feature-result"></div></div>
+</section>
+<section class="card feature-section" id="commits-section">
+  <div class="card-head"><div><h2>Commit history checker</h2><small>REPOSITORY CHANGE TIMELINE</small></div><div class="commit-toolbar"><input id="commit-search" placeholder="Filter commit messages or authors"><button class="btn primary" id="commit-refresh">Refresh commits →</button></div></div>
+  <div class="feature-body"><p>Review recent changes in the connected GitHub repository. Search this timeline by commit message or author, inspect the author and timestamp, and open the original commit on GitHub. This is a history browser—not an automated judgement of code quality.</p><div class="feature-actions"><span class="muted-note" id="commit-summary">Connect a GitHub repository to load commits.</span></div><div class="commit-list" id="commit-list"><div class="empty">Scan a GitHub repository, then refresh to inspect its recent commits.</div></div></div>
 </section>
 <section class="card feature-section" id="history-section">
 <div class="card-head"><h2>Investigation history & reports</h2><div class="feature-actions"><button class="btn" id="history-btn">Refresh history</button><button class="btn" id="audit-btn" style="display:none">Audit trail</button><button class="btn primary" id="report-btn">Export report ↓</button></div></div>
@@ -123,7 +160,24 @@ async function loadSecurityHistory(){if(!state.id)return;try{const d=await api('
 async function investigate(){if(!state.id)return toast('Load or scan a repository first');const question=$('investigation-question').value.trim();if(question.length<5)return toast('Add a more specific investigation question');const b=$('investigate-btn');setLoading(b,true);b.textContent='Investigating…';$('investigation-result').textContent='Retrieving evidence and expanding through repository relationships…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/investigate',{method:'POST',body:JSON.stringify({question})});$('investigation-result').innerHTML='<div class="result-panel"><h3>Investigation answer</h3><p>'+esc(d.answer).replace(/\n/g,'<br>')+'</p><div class="result-meta">Provider: '+esc(d.provider)+' · Verification: '+esc(d.verification.status)+'</div><p>'+esc(d.verification.note)+'</p></div><div class="result-panel"><h3>Investigation trail</h3>'+d.steps.map(x=>'<p><b>'+esc(x.step)+'</b> — '+esc(x.detail)+'</p>').join('')+'</div><div class="evidence">'+d.evidence.map(x=>'<button class="evidence-file" data-path="'+esc(x.path)+'">'+esc(x.path)+'</button>').join('')+'</div>';wireEvidenceLinks();loadHistory()}catch(e){$('investigation-result').textContent=e.message}finally{setLoading(b,false);b.textContent='Start investigation →'}}
 async function reviewPR(){if(!state.id)return toast('Load or scan the repository first');const url=$('pr-url').value.trim();if(!url)return toast('Paste a GitHub pull request URL');const b=$('pr-btn');setLoading(b,true);b.textContent='Reviewing…';$('pr-result').textContent='Fetching pull request patches and checking dependency impact…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/pull-request/review',{method:'POST',body:JSON.stringify({url})});$('pr-result').innerHTML='<div class="result-panel"><h3>Reviewer assessment</h3><p>'+esc(d.review).replace(/\n/g,'<br>')+'</p><div class="result-meta">'+d.files.length+' changed files · '+d.security_findings.length+' static security signals · '+esc(d.provider)+'</div></div><div class="result-panel"><h3>Changed files</h3>'+d.files.map(x=>'<button class="evidence-file" data-path="'+esc(x.path)+'">'+esc(x.status)+' · '+esc(x.path)+' · +'+x.additions+' / -'+x.deletions+'</button>').join('')+'</div><p class="muted-note">'+d.limitations.map(esc).join(' · ')+'</p>';wireEvidenceLinks()}catch(e){$('pr-result').textContent=e.message}finally{setLoading(b,false);b.textContent='Review PR →'}}
 async function simulateChange(){if(!state.id)return toast('Load or scan the repository first');const description=$('change-description').value.trim(),diff=$('change-diff').value;if(description.length<5||diff.length<5)return toast('Add a description and a unified diff');const b=$('change-btn');setLoading(b,true);b.textContent='Simulating…';$('change-result').textContent='Analysing changed paths, dependencies and risky patterns…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/change-simulate',{method:'POST',body:JSON.stringify({description,diff})});$('change-result').innerHTML='<div class="result-panel"><h3>Preflight assessment</h3><p>'+esc(d.answer).replace(/\n/g,'<br>')+'</p><div class="result-meta">'+d.changed_paths.length+' changed paths · '+d.security_findings.length+' security pattern matches</div></div><div class="result-panel"><h3>Potentially affected modules</h3><p>'+esc(d.impact.map(x=>x.path+': '+x.count+' dependent files').join(' · ')||'No matching existing changed paths were found in the scanned snapshot.')+'</p></div><p class="muted-note">'+esc(d.disclaimer)+'</p>'}catch(e){$('change-result').textContent=e.message}finally{setLoading(b,false);b.textContent='Simulate change →'}}
-async function loadHistory(){if(!state.id)return;try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/investigations');$('history-list').innerHTML=(d.items||[]).map(x=>'<div class="history-record"><strong>'+esc(x.question)+'</strong><p>'+esc(x.answer).slice(0,300)+'…</p><small>'+new Date(x.created_at*1000).toLocaleString()+' · '+esc(x.verification?.status||'saved')+'</small></div>').join('')||'<div class="empty">No investigations saved yet. Start one to build the project knowledge trail.</div>'}catch(e){$('history-list').textContent=e.message}}
+async 
+async function loadCommitHistory(){
+  const list=$('commit-list'),summary=$('commit-summary'),query=($('commit-search')?.value||'').trim().toLowerCase();
+  if(!state.id){summary.textContent='No repository connected';list.innerHTML='<div class="empty">Connect and scan a GitHub repository before checking its commits.</div>';return}
+  list.innerHTML='<div class="empty">Loading recent commits from GitHub…</div>';
+  try{
+    const data=await api('/api/repos/'+encodeURIComponent(state.id)+'/commits?limit=40');
+    const commits=data.commits||[];
+    const filtered=commits.filter(c=>(c.message||'').toLowerCase().includes(query)||(c.author||'').toLowerCase().includes(query));
+    summary.textContent=filtered.length+' of '+commits.length+' commits shown · '+(data.repository||'connected repository');
+    if(!filtered.length){list.innerHTML='<div class="empty">No commits match this filter.</div>';return}
+    list.innerHTML=filtered.map(c=>'<article class="commit-row"><div><strong>'+esc(c.message||'(no commit message)')+'</strong><p>'+esc(c.author||'Unknown author')+' · '+esc(c.date?new Date(c.date).toLocaleString():'Date unavailable')+'</p><a href="'+esc(c.url||'#')+'" target="_blank" rel="noopener noreferrer">'+esc((c.sha||'').slice(0,10))+' · Open commit ↗</a></div><div class="commit-meta">'+esc((c.files_changed??'—')+' files')+'<br>+'+esc(String(c.additions??0))+' / −'+esc(String(c.deletions??0))+'</div></article>').join('');
+  }catch(e){summary.textContent='Could not load commits';list.innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
+}
+$('commit-refresh')?.addEventListener('click',loadCommitHistory);
+$('commit-search')?.addEventListener('input',()=>{if(state.id)loadCommitHistory()});
+
+function loadHistory(){if(!state.id)return;try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/investigations');$('history-list').innerHTML=(d.items||[]).map(x=>'<div class="history-record"><strong>'+esc(x.question)+'</strong><p>'+esc(x.answer).slice(0,300)+'…</p><small>'+new Date(x.created_at*1000).toLocaleString()+' · '+esc(x.verification?.status||'saved')+'</small></div>').join('')||'<div class="empty">No investigations saved yet. Start one to build the project knowledge trail.</div>'}catch(e){$('history-list').textContent=e.message}}
 async function loadAudit(){try{const d=await api('/api/admin/audit');$('audit-list').innerHTML='<h3>Administrative audit events</h3>'+d.events.map(x=>'<div class="history-record"><strong>'+esc(x.action)+'</strong><p>'+esc(x.login)+' · '+esc(x.resource)+' · '+esc(x.detail)+'</p><small>'+new Date(x.created_at*1000).toLocaleString()+'</small></div>').join('')}catch(e){$('audit-list').textContent=e.message}}
 async function exportReport(){if(!state.id)return toast('Load or scan the repository first');try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/reports');d.generated_for='CODEWHY';const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='codewhy-report.json';a.click();URL.revokeObjectURL(url);toast('Report exported')}catch(e){toast(e.message)}}
 async function toggleRecording(){if(state.recording){state.recorder.stop();return}if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return toast('Microphone recording is not supported in this browser');try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const recorder=new MediaRecorder(stream);state.recorder=recorder;state.chunks=[];recorder.ondataavailable=e=>{if(e.data.size)state.chunks.push(e.data)};recorder.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());state.recording=false;$('record-btn').textContent='● Record question';$('voice-status').textContent='Transcribing with Saaras v4…';try{const blob=new Blob(state.chunks,{type:recorder.mimeType||'audio/webm'});if(!blob.size)throw new Error('No audio was recorded');const form=new FormData();form.append('file',blob,'recording.webm');form.append('mode','codemix');const d=await api('/api/voice/transcribe',{method:'POST',body:form});$('question').value=d.transcript;$('voice-status').textContent='Transcript ready · '+(d.language_code||'language detected');$('question').focus()}catch(e){$('voice-status').textContent=e.message}};recorder.start();state.recording=true;$('record-btn').textContent='■ Stop recording';$('voice-status').textContent='Recording… stop within 30 seconds';setTimeout(()=>{if(state.recording)recorder.stop()},25000)}catch(e){toast('Microphone access failed: '+e.message)}}
@@ -142,8 +196,10 @@ $('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').
   const layout=document.querySelector('.main > .layout');
   const graphCard=$('graph-card'),rightcol=document.querySelector('.rightcol');
   const debtCard=rightcol?.children[0],filesCard=rightcol?.children[1];
+  const commitSection=$('commits-section');
+  const overviewOnly=[...document.querySelectorAll('[data-overview-only]')];
   const views={
-    overview:[hero,connect,stats],
+    overview:[...overviewOnly,hero,connect,stats],
     graph:[layout,graphCard,filesCard],
     debt:[layout,debtCard],
     ask:[$('ask-card')],
@@ -151,9 +207,10 @@ $('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').
     investigate:[$('investigate-section')],
     pr:[$('pr-section')],
     change:[$('change-section')],
-    history:[$('history-section')]
+    history:[$('history-section')],
+    commits:[commitSection]
   };
-  const all=[hero,connect,stats,layout,$('ask-card'),$('security-section'),$('investigate-section'),$('pr-section'),$('change-section'),$('history-section')].filter(Boolean);
+  const all=[hero,connect,stats,layout,$('ask-card'),$('security-section'),$('investigate-section'),$('pr-section'),$('change-section'),$('history-section'),commitSection,...overviewOnly].filter(Boolean);
   function activate(name){
     all.forEach(node=>node.style.display='none');
     if(rightcol)rightcol.style.display='none';
@@ -165,14 +222,16 @@ $('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').
     if(name==='graph'&&layout){layout.style.display='grid';layout.style.gridTemplateColumns='minmax(0,1fr) minmax(260px,.65fr)';if(rightcol)rightcol.style.display='grid';if(debtCard)debtCard.style.display='none';if(filesCard)filesCard.style.display='';}
     if(name==='debt'&&layout){layout.style.display='grid';layout.style.gridTemplateColumns='minmax(0,1fr)';if(rightcol)rightcol.style.display='grid';if(debtCard)debtCard.style.display='';if(filesCard)filesCard.style.display='none';}
     nav.forEach(button=>{const active=button.dataset.tab===name;button.classList.toggle('active',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current')});
-    const labels={overview:'OVERVIEW',graph:'CODE GRAPH',debt:'TECHNICAL DEBT',ask:'ASK CODEWHY',security:'SECURITY CENTER',investigate:'AUTONOMOUS INVESTIGATOR',pr:'PR RISK REVIEWER',change:'CHANGE SIMULATOR',history:'HISTORY & REPORTS'};
+    const labels={overview:'OVERVIEW',graph:'CODE GRAPH',debt:'TECHNICAL DEBT',ask:'ASK CODEWHY',security:'SECURITY CENTER',investigate:'AUTONOMOUS INVESTIGATOR',pr:'PR RISK REVIEWER',change:'CHANGE SIMULATOR',history:'HISTORY & REPORTS',commits:'COMMIT HISTORY'};
     const crumb=document.querySelector('.crumb span');if(crumb)crumb.textContent=labels[name]||'OVERVIEW';
     if(name==='ask')$('question')?.focus();
     if(name==='history')loadHistory();
+    if(name==='commits')loadCommitHistory();
     if(name==='graph'&&state.graph)requestAnimationFrame(()=>renderGraph(state.graph));
     window.scrollTo({top:0,behavior:'smooth'});
   }
   nav.forEach(button=>button.addEventListener('click',()=>activate(button.dataset.tab)));
+  document.querySelectorAll('[data-go-tab]').forEach(button=>button.addEventListener('click',()=>activate(button.dataset.goTab)));
   const repoNav=$('repo-nav');if(repoNav)repoNav.addEventListener('click',()=>{activate('overview');setTimeout(()=>$('repo-url')?.focus(),150)});
   activate('overview');
 })();
