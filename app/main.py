@@ -201,6 +201,10 @@ def persist_graph(graph: dict[str, Any]) -> None:
         elif edge["type"] == "CALLS":
             driver.execute_query("MATCH (a:File {id:$source}), (b:Function {id:$target}) MERGE (a)-[:CALLS]->(b)", source=edge["source"], target=edge["target"], database_=NEO4J_DATABASE)
 
+def numbered_excerpt(content: str, max_chars: int) -> str:
+    numbered = "\n".join(f"{line_no:04d}: {line}" for line_no, line in enumerate(content.splitlines(), 1))
+    return numbered[:max_chars]
+
 def graph_view(graph: dict[str, Any]) -> dict[str, Any]:
     return {"nodes": graph["nodes"][:180], "edges": graph["edges"][:300], "files": {p: {"lines": info["lines"], "language": info["language"]} for p, info in graph["files"].items()}, "stats": graph["stats"], "metadata": graph["metadata"], "scanned_at": graph["scanned_at"]}
 
@@ -501,7 +505,7 @@ async def sarvam_answer(question: str, context: str) -> tuple[str, str]:
     system = """You are CODEWHY, a careful staff-level software architect. Answer only from the supplied repository evidence. Clearly distinguish direct evidence from inference. Never invent business intent, runtime behaviour, commit history, tests, or ownership. If the evidence is insufficient, say what is unknown and what additional evidence would establish it. Cite file paths and line numbers where available. Be concise but useful."""
     async with httpx.AsyncClient(timeout=75) as client:
         try:
-            response = await client.post(f"{SARVAM_API_BASE}/chat/completions", headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"}, json={"model": SARVAM_MODEL, "messages": [{"role": "system", "content": system}, {"role": "user", "content": f"QUESTION:\n{question}\n\nREPOSITORY EVIDENCE:\n{context}"}], "temperature": 0.2, "max_tokens": 1200})
+            response = await client.post(f"{SARVAM_API_BASE}/chat/completions", headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"}, json={"model": SARVAM_MODEL, "messages": [{"role": "system", "content": system}, {"role": "user", "content": f"QUESTION:\n{question}\n\nREPOSITORY EVIDENCE:\n{context}"}], "temperature": 0.2, "reasoning_effort": "low", "max_tokens": 3000})
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"], "sarvam"
@@ -528,7 +532,7 @@ async def ask(repo_id: str, req: AskRequest):
     selected = scored[:7] or [(0, p, i) for p, i in list(graph["files"].items())[:5]]
     evidence = []
     for score, path, info in selected:
-        excerpt = info["content"][:2400]
+        excerpt = numbered_excerpt(info["content"], 2400)
         evidence.append({"path": path, "lines": info["lines"], "relevance": score, "excerpt": excerpt})
     context = "\n\n".join(f"FILE: {e['path']} ({e['lines']} lines)\n{e['excerpt']}" for e in evidence)
     answer, provider = await sarvam_answer(req.question, context)
@@ -673,7 +677,7 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
             if src in evidence_paths or dst in evidence_paths:
                 evidence_paths.update((src, dst))
     evidence_paths = set(list(evidence_paths)[:9])
-    evidence = [{"path": p, "lines": graph["files"][p]["lines"], "excerpt": graph["files"][p]["content"][:1800]} for p in sorted(evidence_paths) if p in graph["files"]]
+    evidence = [{"path": p, "lines": graph["files"][p]["lines"], "excerpt": numbered_excerpt(graph["files"][p]["content"], 1800)} for p in sorted(evidence_paths) if p in graph["files"]]
     graph_edges = [e for e in graph["edges"] if e.get("source_path") in evidence_paths or e.get("target_path") in evidence_paths][:35]
     context = "\n\n".join(f"FILE: {e['path']} ({e['lines']} lines)\n{e['excerpt']}" for e in evidence)
     context += "\nIN-MEMORY GRAPH RELATIONSHIPS (static-analysis evidence):\n" + json.dumps(graph_edges[:35])
