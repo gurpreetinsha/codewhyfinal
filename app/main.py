@@ -672,8 +672,10 @@ async def run_security_scan(repo_id: str, request: Request):
     report["repository"] = graph["metadata"].get("full_name", repo_id)
     report["attack_paths"] = attack_path_report(graph, report["findings"])
     report["scanned_at"] = int(time.time())
+    user = getattr(request.state, "user", None)
+    report["timeline_delta"] = save_security_scan(repo_id, user.get("id") if user else None, report)
     SECURITY_REPORTS[repo_id] = report
-    audit(getattr(request.state, "user", None), "security.scan", repo_id, f"{report['summary']['total']} findings")
+    audit(user, "security.scan", repo_id, f"{report['summary']['total']} findings")
     return report
 
 async def github_history_context(graph: dict[str, Any], paths: set[str], token: str | None = None) -> list[dict[str, str]]:
@@ -697,6 +699,13 @@ async def github_history_context(graph: dict[str, Any], paths: set[str], token: 
             except (httpx.RequestError, ValueError, KeyError):
                 continue
     return history
+
+
+@app.get("/api/repos/{repo_id:path}/security/history")
+async def security_history(repo_id: str):
+    if repo_id not in REPOS:
+        raise HTTPException(404, "Scan this repository first.")
+    return {"items": load_security_scans(repo_id, 30)}
 
 
 @app.post("/api/repos/{repo_id:path}/investigate")
@@ -785,6 +794,7 @@ async def repository_report(repo_id: str):
         "technical_debt": debt_report(graph),
         "investigations": load_investigations(repo_id, 20),
         "security": SECURITY_REPORTS.get(repo_id),
+        "security_history": load_security_scans(repo_id, 20),
         "limitations": ["Static analysis cannot establish runtime exploitability.", "Dependency checks cover supported exact-version manifests and the OSV database.", "Dynamic imports and external runtime configuration may be missed."]
     }
 
