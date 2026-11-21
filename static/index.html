@@ -15,6 +15,11 @@
 
 .feature-section{margin-top:14px}.feature-body{padding:18px}.feature-body>p{color:var(--muted);font-size:11px;line-height:1.6;margin:0 0 12px}.feature-body textarea{width:100%;resize:vertical;min-height:70px;background:#0d1219;border:1px solid #303a48;border-radius:8px;padding:12px;color:var(--text);font:11px/1.6 var(--mono);outline:none;margin-top:9px}.feature-body textarea:focus{border-color:var(--lime)}.feature-body>input{width:100%;margin:8px 0}.feature-actions{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}.muted-note{color:#748194;font-size:10px}.inline-field{display:flex;gap:8px}.inline-field input{flex:1}.feature-result{margin-top:15px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;line-height:1.7;white-space:normal}.feature-result:empty{display:none}.result-panel{background:#0d131b;border:1px solid #283342;border-radius:9px;padding:13px;margin:9px 0}.result-panel h3{font-size:12px;margin:0 0 8px}.result-panel p{color:#c6d0dd;margin:5px 0}.result-meta{font:10px var(--mono);color:var(--cyan);margin-top:8px}.security-summary{display:flex;gap:18px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line)}.risk-score{width:105px;height:85px;border:1px solid #384a3b;border-radius:10px;display:grid;place-content:center;text-align:center}.risk-score strong{font-size:30px;color:var(--lime)}.risk-score small{font:9px var(--mono);color:var(--muted)}.severity-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex:1}.severity-grid div{display:grid;gap:5px}.severity-grid b{font-size:21px}.severity-grid small{font:9px var(--mono);color:var(--muted)}.voice-row{display:flex;gap:8px;align-items:center;margin-top:9px;flex-wrap:wrap}.voice-row select{background:#0d1219;color:var(--text);border:1px solid #303a48;border-radius:7px;padding:8px}.history-record{border-bottom:1px solid #202733;padding:12px 0}.history-record strong{font-size:12px}.history-record p{color:var(--muted);font-size:11px;margin:5px 0}.history-record small{font:10px var(--mono);color:var(--cyan)}
 .evidence-file{background:#101a21;border:1px solid #293845;color:var(--cyan);padding:6px 8px;border-radius:6px;font:10px var(--mono);margin:3px;cursor:pointer}.evidence-file:hover{border-color:var(--lime);color:var(--lime)}
+
+/* Focused workspace views */
+.main > .hero,.main > .connect,.main > .stats,.main > .layout,.main > #ask-card,.main > .feature-section{transition:opacity .15s ease}
+.main > .layout{margin-top:4px}
+@media(max-width:680px){.main > .layout{grid-template-columns:1fr!important}}
 </style></head>
 <body>
 <div class="shell">
@@ -99,7 +104,53 @@ async function toggleRecording(){if(state.recording){state.recorder.stop();retur
 async function speakAnswer(){const text=$('answer').innerText.trim();if(!text)return toast('Ask a question before requesting a spoken answer');try{$('voice-status').textContent='Generating spoken answer…';const d=await api('/api/voice/speak',{method:'POST',body:JSON.stringify({text:text.slice(0,2400),language_code:$('speech-language').value})});const audio=new Audio('data:'+d.mime_type+';base64,'+d.audio_base64);await audio.play();$('voice-status').textContent='Playing Sarvam voice response · '+d.language_code}catch(e){$('voice-status').textContent=e.message}}
 
 $('repo-nav').addEventListener('click',()=>{$('repo-url').scrollIntoView({behavior:'smooth',block:'center'});$('repo-url').focus()});$('scan-btn').addEventListener('click',scan);$('security-btn').addEventListener('click',runSecurity);$('security-history-btn').addEventListener('click',loadSecurityHistory);$('investigate-btn').addEventListener('click',investigate);$('pr-btn').addEventListener('click',reviewPR);$('change-btn').addEventListener('click',simulateChange);$('history-btn').addEventListener('click',loadHistory);$('audit-btn').addEventListener('click',loadAudit);$('report-btn').addEventListener('click',exportReport);$('record-btn').addEventListener('click',toggleRecording);$('speak-btn').addEventListener('click',speakAnswer);$('ask-btn').addEventListener('click',ask);$('question').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});$('repo-url').addEventListener('keydown',e=>{if(e.key==='Enter')scan()});$('demo-btn').addEventListener('click',loadDemo);$('modal-close').addEventListener('click',()=>$('file-modal').classList.remove('open'));$('file-modal').addEventListener('click',e=>{if(e.target===$('file-modal'))$('file-modal').classList.remove('open')});
-document.querySelectorAll('.nav button[data-tab]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');const map={overview:null,graph:'graph-card',debt:'debt-list',ask:'ask-card',security:'security-section',investigate:'investigate-section',pr:'pr-section',change:'change-section',history:'history-section'};const target=map[b.dataset.tab];if(target)$(target).scrollIntoView({behavior:'smooth',block:'start'});else window.scrollTo({top:0,behavior:'smooth'});if(b.dataset.tab==='ask')$('question').focus();if(b.dataset.tab==='history')loadHistory()}));
+
+// CODEWHY workspace navigation: render one focused workspace at a time.
+(function setupWorkspaceTabs(){
+  const nav=[...document.querySelectorAll('.nav button[data-tab]')];
+  const seen=new Set();
+  nav.forEach(button=>{if(seen.has(button.dataset.tab))button.remove();else seen.add(button.dataset.tab)});
+  const duplicateIds=['security-section','investigate-section','pr-section','change-section','history-section'];
+  duplicateIds.forEach(id=>{const matches=[...document.querySelectorAll('[id="'+id+'"]')];matches.slice(1).forEach(node=>node.remove())});
+  const hero=document.querySelector('.hero'),connect=document.querySelector('.connect'),stats=document.querySelector('.stats');
+  const layout=document.querySelector('.main > .layout');
+  const graphCard=$('graph-card'),rightcol=document.querySelector('.rightcol');
+  const debtCard=rightcol?.children[0],filesCard=rightcol?.children[1];
+  const views={
+    overview:[hero,connect,stats],
+    graph:[layout,graphCard,filesCard],
+    debt:[layout,debtCard],
+    ask:[$('ask-card')],
+    security:[$('security-section')],
+    investigate:[$('investigate-section')],
+    pr:[$('pr-section')],
+    change:[$('change-section')],
+    history:[$('history-section')]
+  };
+  const all=[hero,connect,stats,layout,$('ask-card'),$('security-section'),$('investigate-section'),$('pr-section'),$('change-section'),$('history-section')].filter(Boolean);
+  function activate(name){
+    all.forEach(node=>node.style.display='none');
+    if(rightcol)rightcol.style.display='none';
+    if(graphCard)graphCard.style.display='none';
+    Object.entries(views).forEach(([key,nodes])=>{
+      if(key!==name)return;
+      nodes.forEach(node=>{if(node)node.style.display=''});
+    });
+    if(name==='graph'&&layout){layout.style.display='grid';layout.style.gridTemplateColumns='minmax(0,1fr) minmax(260px,.65fr)';if(rightcol)rightcol.style.display='grid';if(debtCard)debtCard.style.display='none';if(filesCard)filesCard.style.display='';}
+    if(name==='debt'&&layout){layout.style.display='grid';layout.style.gridTemplateColumns='minmax(0,1fr)';if(rightcol)rightcol.style.display='grid';if(debtCard)debtCard.style.display='';if(filesCard)filesCard.style.display='none';}
+    nav.forEach(button=>button.classList.toggle('active',button.dataset.tab===name));
+    const labels={overview:'OVERVIEW',graph:'CODE GRAPH',debt:'TECHNICAL DEBT',ask:'ASK CODEWHY',security:'SECURITY CENTER',investigate:'AUTONOMOUS INVESTIGATOR',pr:'PR RISK REVIEWER',change:'CHANGE SIMULATOR',history:'HISTORY & REPORTS'};
+    const crumb=document.querySelector('.crumb span');if(crumb)crumb.textContent=labels[name]||'OVERVIEW';
+    if(name==='ask')$('question')?.focus();
+    if(name==='history')loadHistory();
+    if(name==='graph'&&state.graph)requestAnimationFrame(()=>renderGraph(state.graph));
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  nav.forEach(button=>button.addEventListener('click',()=>activate(button.dataset.tab)));
+  const repoNav=$('repo-nav');if(repoNav)repoNav.addEventListener('click',()=>{activate('overview');setTimeout(()=>$('repo-url')?.focus(),150)});
+  activate('overview');
+})();
+
 (async()=>{try{const auth=await api('/api/auth/status');state.csrf=auth.csrf_token||'';if(auth.oauth_configured){$('auth-action').style.display='inline-block';$('auth-action').textContent=auth.authenticated?'Sign out':'Sign in with GitHub';$('auth-action').onclick=async()=>{if(auth.authenticated){await api('/api/auth/logout',{method:'POST'});location.reload()}else location.href='/api/auth/github'}}if(auth.authenticated){$('avatar').textContent=(auth.user.login||'U').slice(0,1).toUpperCase();$('mode-pill').textContent=auth.user.role.toUpperCase()+' WORKSPACE';state.role=auth.user.role;if(auth.user.role==='admin')$('audit-btn').style.display='inline-block'}if(auth.auth_required&&!auth.authenticated){document.querySelector('.main').innerHTML='<div style="max-width:620px;margin:15vh auto;text-align:center"><div class="eyebrow">SECURE WORKSPACE</div><h1>Sign in to CODEWHY</h1><p style="color:var(--muted);line-height:1.7">Authenticate with GitHub to access your repositories, investigations and security reports.</p><a class="btn primary" style="display:inline-block;text-decoration:none;margin-top:16px" href="/api/auth/github">Continue with GitHub →</a></div>';return}const h=await api('/api/health');$('sys-status').textContent='Sarvam '+(h.sarvam_configured?'connected':'needs API key')+' · Neo4j '+(h.neo4j_connected?'connected':'memory mode');await loadDemo();await loadHistory();await loadSecurityHistory()}catch(e){$('sys-status').textContent='API connection unavailable';toast(e.message)}})();
 window.addEventListener('resize',()=>{if(state.graph)renderGraph(state.graph)});
 </script></body></html>
