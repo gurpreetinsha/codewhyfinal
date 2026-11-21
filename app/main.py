@@ -508,7 +508,11 @@ async def sarvam_answer(question: str, context: str) -> tuple[str, str]:
             response = await client.post(f"{SARVAM_API_BASE}/chat/completions", headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"}, json={"model": SARVAM_MODEL, "messages": [{"role": "system", "content": system}, {"role": "user", "content": f"QUESTION:\n{question}\n\nREPOSITORY EVIDENCE:\n{context}"}], "temperature": 0.2, "reasoning_effort": "low", "max_tokens": 3000})
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"], "sarvam"
+            message = data["choices"][0]["message"]
+            content = message.get("content")
+            if not isinstance(content, str) or not content.strip():
+                return "Sarvam returned no user-facing answer for this request. Try a narrower question or reduce the amount of retrieved context.", "sarvam_empty_response"
+            return content.strip(), "sarvam"
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text[:500]
             raise HTTPException(502, f"Sarvam API returned {exc.response.status_code}: {detail}")
