@@ -328,9 +328,12 @@ async def auth_and_tenant_middleware(request: Request, call_next):
         if not valid_csrf(user, csrf):
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "CSRF validation failed. Refresh and try again."}, status_code=403)
-    if user:
-        for repo_id, owner in REPO_OWNERS.items():
-            if path.startswith("/api/repos/" + repo_id + "/") and owner.lower() != user["login"].lower():
+    for repo_id, owner in REPO_OWNERS.items():
+        if path.startswith("/api/repos/" + repo_id + "/"):
+            if owner != "anonymous" and not user:
+                from fastapi.responses import JSONResponse
+                return JSONResponse({"detail": "Sign in to access this repository workspace."}, status_code=401)
+            if user and owner != "anonymous" and owner.lower() != user["login"].lower():
                 from fastapi.responses import JSONResponse
                 return JSONResponse({"detail": "Repository access denied."}, status_code=404)
     response = await call_next(request)
@@ -428,7 +431,7 @@ async def scan(req: ScanRequest, request: Request):
 @app.get("/api/repos")
 async def repos(request: Request):
     user = getattr(request.state, "user", None)
-    visible = [g for g in REPOS.values() if not AUTH_REQUIRED or REPO_OWNERS.get(g["id"]) == (user["login"] if user else "")]
+    visible = [g for g in REPOS.values() if REPO_OWNERS.get(g["id"], "anonymous") == "anonymous" or (user and REPO_OWNERS.get(g["id"]) == user["login"])]
     return [{"id": g["id"], "metadata": g["metadata"], "stats": g["stats"]} for g in visible]
 
 @app.get("/api/repos/{repo_id:path}/graph")
