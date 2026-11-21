@@ -140,7 +140,7 @@ If Neo4j is not configured, the demo uses an in-memory graph. The SQLite databas
 - GET /api/repos/{repo_id}/graph, GET /api/repos/{repo_id}/file, GET /api/repos/{repo_id}/history — codebase exploration.
 - POST /api/repos/{repo_id}/impact — dependency impact.
 - POST /api/repos/{repo_id}/ask, POST /api/repos/{repo_id}/investigate — AI Q&A and autonomous investigation.
-- POST /api/repos/{repo_id}/security/scan and GET /api/repos/{repo_id}/security/history — Sentinel scan and finding timeline.
+- POST /api/repos/{repo_id}/security/scan and GET /api/repos/{repo_id}/security-history — Sentinel scan and finding timeline.
 - POST /api/repos/{repo_id}/change-simulate — proposed diff review.
 - POST /api/repos/{repo_id}/pull-request/review — GitHub PR review.
 - GET /api/repos/{repo_id}/investigations, GET /api/repos/{repo_id}/reports — history and report data.
