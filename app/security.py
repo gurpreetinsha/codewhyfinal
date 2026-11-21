@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import tomllib
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -85,7 +86,7 @@ def parse_dependencies(files: dict[str, str]) -> list[dict[str, str]]:
     deps: dict[tuple[str, str], dict[str, str]] = {}
     for path, content in files.items():
         name = PurePosixPath(path).name.lower()
-        if name in {"requirements.txt", "requirements-dev.txt"}:
+        if name in {"requirements.txt", "requirements-dev.txt", "requirements.lock"}:
             for raw in content.splitlines():
                 line = raw.strip()
                 if not line or line.startswith(("#", "-", "git+", "http")):
@@ -105,7 +106,37 @@ def parse_dependencies(files: dict[str, str]) -> list[dict[str, str]]:
                             deps[("npm", package.lower())] = {"ecosystem": "npm", "name": package, "version": version, "manifest": path}
             except (ValueError, TypeError):
                 pass
-    return list(deps.values())[:120]
+        elif name == "package-lock.json":
+            try:
+                data = json.loads(content)
+                for package_path, item in (data.get("packages") or {}).items():
+                    if not package_path or "node_modules/" not in package_path:
+                        continue
+                    package = item.get("name") or package_path.split("node_modules/")[-1]
+                    version = str(item.get("version", ""))
+                    if package and re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version):
+                        deps[("npm", package.lower())] = {"ecosystem": "npm", "name": package, "version": version, "manifest": path}
+            except (ValueError, TypeError):
+                pass
+        elif name in {"poetry.lock", "uv.lock", "cargo.lock"}:
+            try:
+                data = tomllib.loads(content)
+                entries = data.get("package") or data.get("packages") or []
+                ecosystem = "crates.io" if name == "cargo.lock" else "PyPI"
+                for item in entries:
+                    package, version = item.get("name"), str(item.get("version", ""))
+                    if package and re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version):
+                        deps[(ecosystem, package.lower())] = {"ecosystem": ecosystem, "name": package, "version": version, "manifest": path}
+            except (ValueError, TypeError):
+                pass
+        elif name == "go.sum":
+            for line in content.splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and not parts[1].endswith("/go.mod"):
+                    version = parts[1].split("/")[0]
+                    if re.fullmatch(r"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version):
+                        deps[("Go", parts[0].lower())] = {"ecosystem": "Go", "name": parts[0], "version": version, "manifest": path}
+    return list(deps.values())[:500]
 
 async def check_osv(dependencies: list[dict[str, str]]) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     if not dependencies:
