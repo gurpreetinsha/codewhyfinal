@@ -167,7 +167,7 @@ def persist_graph(graph: dict[str, Any]) -> None:
             driver.execute_query("MATCH (a:File {id:$source}), (b:File {id:$target}) MERGE (a)-[:IMPORTS]->(b)", source=edge["source"], target=edge["target"], database_=NEO4J_DATABASE)
 
 def graph_view(graph: dict[str, Any]) -> dict[str, Any]:
-    return {"nodes": graph["nodes"][:180], "edges": graph["edges"][:300], "stats": graph["stats"], "metadata": graph["metadata"], "scanned_at": graph["scanned_at"]}
+    return {"nodes": graph["nodes"][:180], "edges": graph["edges"][:300], "files": {p: {"lines": info["lines"], "language": info["language"]} for p, info in graph["files"].items()}, "stats": graph["stats"], "metadata": graph["metadata"], "scanned_at": graph["scanned_at"]}
 
 def debt_report(graph: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
