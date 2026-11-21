@@ -358,7 +358,7 @@ async def get_audit(request: Request, limit: int = 100):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "sarvam_configured": bool(SARVAM_API_KEY), "neo4j_connected": bool(driver), "github_token_configured": bool(GITHUB_TOKEN)}
+    return {"status": "ok", "sarvam_configured": bool(SARVAM_API_KEY), "neo4j_connected": bool(driver), "github_token_configured": bool(GITHUB_TOKEN), "auth_required": AUTH_REQUIRED, "oauth_configured": oauth_ready()}
 
 @app.get("/api/demo")
 async def demo():
@@ -374,7 +374,8 @@ async def scan(req: ScanRequest, request: Request):
     owner, repo = match.groups()
     user = getattr(request.state, "user", None)
     files, meta = await github_files(owner, repo, req.branch, user.get("access_token") if user else None)
-    graph = build_graph(rid(owner, repo), files, meta)
+    repo_key = f"{user['login']}::{owner}/{repo}" if user else rid(owner, repo)
+    graph = build_graph(repo_key, files, meta)
     REPOS[graph["id"]] = graph
     REPO_OWNERS[graph["id"]] = user["login"] if user else "anonymous"
     audit(user, "repository.scan", graph["id"], f"Loaded {len(files)} files")
@@ -385,8 +386,10 @@ async def scan(req: ScanRequest, request: Request):
     return {"repository": graph_view(graph), "debt": debt_report(graph), "id": graph["id"], "storage": "neo4j" if driver else "memory"}
 
 @app.get("/api/repos")
-async def repos():
-    return [{"id": g["id"], "metadata": g["metadata"], "stats": g["stats"]} for g in REPOS.values()]
+async def repos(request: Request):
+    user = getattr(request.state, "user", None)
+    visible = [g for g in REPOS.values() if not AUTH_REQUIRED or REPO_OWNERS.get(g["id"]) == (user["login"] if user else "")]
+    return [{"id": g["id"], "metadata": g["metadata"], "stats": g["stats"]} for g in visible]
 
 @app.get("/api/repos/{repo_id:path}/graph")
 async def get_graph(repo_id: str):
