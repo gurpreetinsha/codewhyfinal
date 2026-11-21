@@ -535,6 +535,11 @@ async def ask(repo_id: str, req: AskRequest):
         excerpt = numbered_excerpt(info["content"], 2400)
         evidence.append({"path": path, "lines": info["lines"], "relevance": score, "excerpt": excerpt})
     context = "\n\n".join(f"FILE: {e['path']} ({e['lines']} lines)\n{e['excerpt']}" for e in evidence)
+    related_edges = [edge for edge in graph["edges"] if edge.get("source_path") in {e["path"] for e in evidence} or edge.get("target_path") in {e["path"] for e in evidence}]
+    context += "\nIN-MEMORY GRAPH RELATIONSHIPS:\n" + json.dumps(related_edges[:35])
+    persisted_context = neo4j_graph_context(repo_id, {e["path"] for e in evidence})
+    if persisted_context:
+        context += "\nNEO4J GRAPH NEIGHBOURHOOD:\n" + json.dumps(persisted_context)
     answer, provider = await sarvam_answer(req.question, context)
     return {"answer": answer, "provider": provider, "evidence": [{"path": e["path"], "lines": e["lines"], "relevance": e["relevance"]} for e in evidence], "disclaimer": "Answers are grounded in the retrieved source excerpts. Static analysis can miss dynamic behaviour and external context."}
 
@@ -655,6 +660,29 @@ async def run_security_scan(repo_id: str, request: Request):
     audit(getattr(request.state, "user", None), "security.scan", repo_id, f"{report['summary']['total']} findings")
     return report
 
+async def github_history_context(graph: dict[str, Any], paths: set[str], token: str | None = None) -> list[dict[str, str]]:
+    full_name = graph["metadata"].get("full_name", "")
+    if graph["metadata"].get("demo") or "/" not in full_name:
+        return []
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    history = []
+    async with httpx.AsyncClient(timeout=18, headers=headers) as client:
+        for path in sorted(paths)[:3]:
+            try:
+                response = await client.get(f"https://api.github.com/repos/{full_name}/commits", params={"path": path, "per_page": 3})
+                if response.status_code >= 400:
+                    continue
+                for item in response.json()[:3]:
+                    commit = item.get("commit", {})
+                    author = commit.get("author") or {}
+                    history.append({"path": path, "sha": item.get("sha", "")[:8], "date": author.get("date", ""), "message": (commit.get("message") or "").splitlines()[0]})
+            except (httpx.RequestError, ValueError, KeyError):
+                continue
+    return history
+
+
 @app.post("/api/repos/{repo_id:path}/investigate")
 async def autonomous_investigate(repo_id: str, req: InvestigationRequest, request: Request):
     graph = REPOS.get(repo_id)
@@ -676,7 +704,7 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
             dst = edge.get("target_path", edge["target"].removeprefix("file:"))
             if src in evidence_paths or dst in evidence_paths:
                 evidence_paths.update((src, dst))
-    evidence_paths = set(list(evidence_paths)[:9])
+    evidence_paths = set(sorted(evidence_paths)[:9])
     evidence = [{"path": p, "lines": graph["files"][p]["lines"], "excerpt": numbered_excerpt(graph["files"][p]["content"], 1800)} for p in sorted(evidence_paths) if p in graph["files"]]
     graph_edges = [e for e in graph["edges"] if e.get("source_path") in evidence_paths or e.get("target_path") in evidence_paths][:35]
     context = "\n\n".join(f"FILE: {e['path']} ({e['lines']} lines)\n{e['excerpt']}" for e in evidence)
@@ -684,6 +712,10 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
     persisted_context = neo4j_graph_context(repo_id, evidence_paths)
     if persisted_context:
         context += "\nNEO4J GRAPH NEIGHBOURHOOD (persisted relationships):\n" + json.dumps(persisted_context)
+    user = getattr(request.state, "user", None)
+    history_context = await github_history_context(graph, evidence_paths, user.get("access_token") if user else None)
+    if history_context:
+        context += "\nGITHUB COMMIT HISTORY (historical clues, not proof of intent):\n" + json.dumps(history_context)
     steps = [
         {"step": "Question decomposition", "detail": "Extracted technical terms and likely repository concepts from the investigation question."},
         {"step": "Evidence retrieval", "detail": f"Selected {len(evidence)} source files using lexical relevance and repository paths."},
