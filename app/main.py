@@ -613,6 +613,68 @@ async def ask(repo_id: str, req: AskRequest):
     answer, provider = await sarvam_answer(req.question, context)
     return {"answer": answer, "provider": provider, "evidence": [{"path": e["path"], "lines": e["lines"], "relevance": e["relevance"]} for e in evidence], "disclaimer": "Answers are grounded in the retrieved source excerpts. Static analysis can miss dynamic behaviour and external context."}
 
+@app.get("/api/repos/{repo_id:path}/commits")
+async def get_repository_commits(repo_id: str, request: Request, limit: int = 40):
+    """Return recent repository commits with basic change statistics."""
+    graph = REPOS.get(repo_id)
+    if not graph:
+        raise HTTPException(404, "Repository workspace not found. Scan the repository again.")
+
+    full_name = graph["metadata"].get("full_name", "")
+    if "/" not in full_name:
+        return {
+            "repository": full_name or "demo workspace",
+            "commits": [],
+            "note": "Commit history is available for connected GitHub repositories.",
+        }
+
+    limit = max(1, min(limit, 100))
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    user = getattr(request.state, "user", None)
+    token = user.get("access_token") if user else None
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    async with httpx.AsyncClient(timeout=20, headers=headers) as client:
+        response = await client.get(
+            f"https://api.github.com/repos/{full_name}/commits",
+            params={"per_page": limit},
+        )
+        if response.status_code == 404:
+            raise HTTPException(404, "Repository not found or GitHub access is unavailable.")
+        if response.status_code >= 400:
+            raise HTTPException(
+                response.status_code,
+                "Could not retrieve repository commits. Check GitHub access and rate limits.",
+            )
+
+    commits = []
+    for item in response.json():
+        commit = item.get("commit") or {}
+        author = commit.get("author") or {}
+        stats = item.get("stats") or {}
+        commits.append({
+            "sha": item.get("sha", ""),
+            "message": (commit.get("message") or "").splitlines()[0],
+            "author": author.get("name") or (item.get("author") or {}).get("login") or "Unknown",
+            "date": author.get("date", ""),
+            "url": item.get("html_url", ""),
+            "files_changed": len(item.get("files") or []),
+            "additions": stats.get("additions", 0),
+            "deletions": stats.get("deletions", 0),
+        })
+
+    audit(user, "repository.commits.view", repo_id, f"limit={limit}")
+    return {
+        "repository": full_name,
+        "commits": commits,
+        "note": "Commit messages and change statistics are historical context, not proof of intent or code quality.",
+    }
+
+
 @app.get("/api/repos/{repo_id:path}/history")
 async def get_history(repo_id: str, path: str, request: Request):
     graph = REPOS.get(repo_id)
