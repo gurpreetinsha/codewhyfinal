@@ -47,3 +47,11 @@ def test_demo_routes_and_security_scan_work_end_to_end():
     timeline = client.get("/api/repos/" + repo_id + "/security/history")
     assert timeline.status_code == 200
     assert len(timeline.json()["items"]) >= 1
+
+def test_anonymous_repository_workspaces_are_isolated():
+    first_client = TestClient(app)
+    second_client = TestClient(app)
+    first_repo = first_client.get("/api/demo").json()["id"]
+    path = "/api/repos/" + first_repo + "/graph"
+    assert first_client.get(path).status_code == 200
+    assert second_client.get(path).status_code == 404
