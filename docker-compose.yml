@@ -8,6 +8,9 @@ services:
       - .env
     environment:
       - MAX_REPO_FILES=350
+      - DATABASE_PATH=/data/codewhy.sqlite3
+    volumes:
+      - ./data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
