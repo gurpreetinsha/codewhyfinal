@@ -716,10 +716,22 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
     history_context = await github_history_context(graph, evidence_paths, user.get("access_token") if user else None)
     if history_context:
         context += "\nGITHUB COMMIT HISTORY (historical clues, not proof of intent):\n" + json.dumps(history_context)
+    security_context = []
+    security_terms = {"security", "vulnerability", "vulnerable", "secret", "attack", "injection", "token", "credential", "exploit"}
+    if security_terms.intersection(set(terms)):
+        security_report_data = SECURITY_REPORTS.get(repo_id)
+        if not security_report_data:
+            security_report_data = await security_report({p: info["content"] for p, info in graph["files"].items()})
+            security_report_data["attack_paths"] = attack_path_report(graph, security_report_data["findings"])
+            SECURITY_REPORTS[repo_id] = security_report_data
+        security_context = [item for item in security_report_data["findings"] if item.get("path") in evidence_paths or item.get("category") == "dependency"][:30]
+        if security_context:
+            context += "\nRELATED SECURITY FINDINGS (static/advisory evidence):\n" + json.dumps(security_context)
     steps = [
         {"step": "Question decomposition", "detail": "Extracted technical terms and likely repository concepts from the investigation question."},
         {"step": "Evidence retrieval", "detail": f"Selected {len(evidence)} source files using lexical relevance and repository paths."},
         {"step": "Graph expansion", "detail": f"Expanded evidence across import relationships; inspected {len(graph_edges)} nearby graph edges."},
+        {"step": "Historical and security correlation", "detail": f"Retrieved {len(history_context)} recent commit messages and {len(security_context)} related security findings where relevant."},
         {"step": "Evidence synthesis", "detail": "Asked the configured language model to distinguish observed code from inferred intent."}
     ]
     answer, provider = await sarvam_answer(req.question, context)
