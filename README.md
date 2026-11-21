@@ -62,7 +62,7 @@ CODEWHY calls Sarvam's OpenAI-compatible Chat Completions API at `POST /v2/chat/
 
 ## Neo4j integration
 
-The app uses the official Neo4j Python driver. It creates `Repository`, `File`, `Function`, `Class`, and `Commit` nodes and relationships such as `CONTAINS`, `DEFINES`, `IMPORTS`, `CALLS`, and `MODIFIED`. Repository IDs are namespaced to prevent accidental cross-repository mixing.
+The app uses the official Neo4j Python driver. It persists `Repository`, `File`, `Function`, and `CodeClass` nodes with `CONTAINS`, `DEFINES`, `IMPORTS`, and `CALLS` relationships. File-level commit history is fetched from GitHub on demand and is not represented as a Neo4j commit graph yet. Repository IDs are namespaced to prevent accidental cross-repository mixing.
 
 ## Deploy
 
@@ -81,7 +81,7 @@ For production:
 - Repository content is treated as untrusted input; it is never executed.
 - GitHub tokens and Sarvam keys are read only from server environment variables.
 - API responses do not expose secrets.
-- This hackathon build is a single-workspace prototype. Add organisation SSO, role-based access, audit logs, rate limiting, and per-tenant encryption before production enterprise rollout.
+- The app keeps scanned source excerpts in process memory for interactive file inspection and Q&A; re-scan repositories after a server restart. Neo4j stores graph structure when configured. This hackathon build is a single-workspace prototype. Add organisation SSO, role-based access, audit logs, rate limiting, and per-tenant encryption before production enterprise rollout.
 
 ## Project structure
 
