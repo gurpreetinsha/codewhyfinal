@@ -101,7 +101,6 @@ def parse_dependencies(files: dict[str, str]) -> list[dict[str, str]]:
                 for section in ("dependencies", "devDependencies", "optionalDependencies"):
                     for package, raw_version in (data.get(section) or {}).items():
                         version = str(raw_version).strip()
-                        version = re.sub(r"^[~^>=<v ]+", "", version)
                         if re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version):
                             deps[("npm", package.lower())] = {"ecosystem": "npm", "name": package, "version": version, "manifest": path}
             except (ValueError, TypeError):
