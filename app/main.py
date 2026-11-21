@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 load_dotenv()
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -273,6 +273,10 @@ class ChangeSimulationRequest(BaseModel):
 class PullRequestReviewRequest(BaseModel):
     url: str = Field(min_length=15, max_length=500)
 
+class SpeechSynthesisRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2500)
+    language_code: str = Field(default="en-IN", max_length=12)
+
 @app.middleware("http")
 async def auth_and_tenant_middleware(request: Request, call_next):
     path = request.url.path
@@ -476,6 +480,53 @@ async def get_history(repo_id: str, path: str, request: Request):
             author = commit.get("author") or {}
             commits.append({"sha": item.get("sha", "")[:8], "message": (commit.get("message") or "").splitlines()[0], "author": author.get("name", "Unknown"), "date": author.get("date", ""), "url": item.get("html_url", "")})
         return {"commits": commits, "note": "Commit messages are historical evidence, not guaranteed explanations of original intent."}
+
+@app.post("/api/voice/transcribe")
+async def voice_transcribe(file: UploadFile = File(...), mode: str = Form("codemix")):
+    if not SARVAM_API_KEY:
+        raise HTTPException(503, "Add SARVAM_API_KEY to enable Sarvam speech recognition.")
+    allowed_modes = {"transcribe", "translate", "verbatim", "translit", "codemix"}
+    if mode not in allowed_modes:
+        raise HTTPException(400, "Unsupported transcription mode.")
+    audio = await file.read(15 * 1024 * 1024 + 1)
+    if not audio or len(audio) > 15 * 1024 * 1024:
+        raise HTTPException(413, "Audio must be non-empty and no larger than 15 MB.")
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.post(
+                "https://api.sarvam.ai/speech-to-text",
+                headers={"api-subscription-key": SARVAM_API_KEY},
+                data={"model": "saaras:v4", "mode": mode},
+                files={"file": (file.filename or "recording.webm", audio, file.content_type or "application/octet-stream")},
+            )
+            response.raise_for_status()
+            data = response.json()
+            return {"transcript": data.get("transcript", ""), "language_code": data.get("language_code", ""), "request_id": data.get("request_id"), "model": "saaras:v4", "mode": mode, "duration_limit_seconds": 30}
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(502, f"Sarvam speech recognition returned {exc.response.status_code}. Check audio format and the 30-second limit.")
+    except (httpx.RequestError, ValueError) as exc:
+        raise HTTPException(502, f"Speech recognition failed: {exc}")
+
+@app.post("/api/voice/speak")
+async def voice_speak(req: SpeechSynthesisRequest):
+    if not SARVAM_API_KEY:
+        raise HTTPException(503, "Add SARVAM_API_KEY to enable Sarvam speech synthesis.")
+    async with httpx.AsyncClient(timeout=45) as client:
+        try:
+            response = await client.post(
+                "https://api.sarvam.ai/text-to-speech",
+                headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"},
+                json={"text": req.text, "target_language_code": req.language_code, "model": "bulbul:v4-flash", "speaker": "shubh_enhi_ads", "enable_preprocessing": True},
+            )
+            response.raise_for_status()
+            data = response.json()
+            if not data.get("audios"):
+                raise HTTPException(502, "Sarvam returned no audio data.")
+            return {"audio_base64": data["audios"][0], "mime_type": "audio/wav", "language_code": req.language_code, "model": "bulbul:v4-flash"}
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(502, f"Sarvam speech synthesis returned {exc.response.status_code}.")
+        except httpx.RequestError as exc:
+            raise HTTPException(502, f"Speech synthesis failed: {exc}")
 
 @app.post("/api/repos/{repo_id:path}/security/scan")
 async def run_security_scan(repo_id: str, request: Request):
