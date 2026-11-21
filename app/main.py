@@ -525,10 +525,10 @@ async def ask(repo_id: str, req: AskRequest):
     if not graph:
         raise HTTPException(404, "Repository not found. Scan it first.")
     q = req.question.lower()
+    terms = [t for t in re.findall(r"[a-z_]{3,}", q) if t not in {"what", "why", "how", "does", "this", "that", "with", "from", "into", "code"}]
     scored = []
     for path, info in graph["files"].items():
         haystack = (path + " " + info["content"]).lower()
-        terms = [t for t in re.findall(r"[a-z_]{3,}", q) if t not in {"what", "why", "how", "does", "this", "that", "with", "from", "into", "code"}]
         score = sum(1 for t in terms if t in haystack)
         if score:
             scored.append((score, path, info))
@@ -544,7 +544,7 @@ async def ask(repo_id: str, req: AskRequest):
     persisted_context = neo4j_graph_context(repo_id, {e["path"] for e in evidence})
     if persisted_context:
         context += "\nNEO4J GRAPH NEIGHBOURHOOD:\n" + json.dumps(persisted_context)
-    security_terms = {"security", "vulnerability", "vulnerable", "secret", "attack", "injection", "token", "credential", "exploit"}
+    security_terms = {"security", "vulnerability", "vulnerabilities", "vulnerable", "secret", "secrets", "attack", "attacks", "injection", "injections", "token", "tokens", "credential", "credentials", "exploit", "exploits", "password", "passwords"}
     if security_terms.intersection(set(terms)):
         security_data = SECURITY_REPORTS.get(repo_id)
         if not security_data:
