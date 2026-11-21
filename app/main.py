@@ -7,6 +7,7 @@ import os
 import re
 import time
 import secrets
+import hmac
 from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -60,7 +61,7 @@ INVESTIGATIONS: dict[str, list[dict[str, Any]]] = defaultdict(list)
 REPO_OWNERS: dict[str, str] = {}
 SECURITY_REPORTS: dict[str, dict[str, Any]] = {}
 RATE_BUCKETS: dict[str, list[float]] = defaultdict(list)
-OAUTH_STATES: dict[str, int] = {}
+OAUTH_STATE_COOKIE = "codewhy_oauth_state"
 init_auth_db()
 if AUTH_REQUIRED and not oauth_ready():
     raise RuntimeError("AUTH_REQUIRED=true needs GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET, GITHUB_OAUTH_REDIRECT_URI, and SESSION_SECRET (32+ characters).")
@@ -401,19 +402,23 @@ async def auth_status(request: Request):
 async def github_oauth_start():
     if not oauth_ready():
         raise HTTPException(503, "GitHub OAuth is not configured. Set the OAuth environment variables first.")
+    # Keep OAuth state in a short-lived, HttpOnly browser cookie rather than
+    # process memory: serverless requests may land on different instances.
     state = secrets.token_urlsafe(32)
-    OAUTH_STATES[state] = int(time.time()) + 600
-    for old, expiry in list(OAUTH_STATES.items()):
-        if expiry < int(time.time()):
-            OAUTH_STATES.pop(old, None)
     from urllib.parse import urlencode
     params = urlencode({"client_id": OAUTH_CLIENT_ID, "redirect_uri": OAUTH_REDIRECT_URI, "scope": "read:user user:email repo", "state": state})
-    return RedirectResponse("https://github.com/login/oauth/authorize?" + params, status_code=302)
+    response = RedirectResponse("https://github.com/login/oauth/authorize?" + params, status_code=302)
+    response.set_cookie(
+        OAUTH_STATE_COOKIE, state, httponly=True,
+        secure=OAUTH_REDIRECT_URI.startswith("https://"),
+        samesite="lax", max_age=600, path="/api/auth",
+    )
+    return response
 
 @app.get("/api/auth/callback")
-async def github_oauth_callback(code: str, state: str):
-    expiry = OAUTH_STATES.pop(state, None)
-    if not expiry or expiry < int(time.time()):
+async def github_oauth_callback(code: str, state: str, request: Request):
+    expected_state = request.cookies.get(OAUTH_STATE_COOKIE, "")
+    if not expected_state or not hmac.compare_digest(expected_state, state):
         raise HTTPException(400, "OAuth state expired or invalid. Please sign in again.")
     async with httpx.AsyncClient(timeout=20) as client:
         token_response = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, json={"client_id": OAUTH_CLIENT_ID, "client_secret": OAUTH_CLIENT_SECRET, "code": code, "redirect_uri": OAUTH_REDIRECT_URI})
@@ -433,6 +438,7 @@ async def github_oauth_callback(code: str, state: str):
     secure = OAUTH_REDIRECT_URI.startswith("https://")
     response.set_cookie(SESSION_COOKIE, sid, httponly=True, secure=secure, samesite="lax", max_age=43200, path="/")
     response.set_cookie(CSRF_COOKIE, csrf, httponly=False, secure=secure, samesite="lax", max_age=43200, path="/")
+    response.delete_cookie(OAUTH_STATE_COOKIE, path="/api/auth")
     return response
 
 @app.post("/api/auth/logout")
