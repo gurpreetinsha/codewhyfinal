@@ -9,23 +9,23 @@ from typing import Any
 import httpx
 
 SECRET_PATTERNS = [
-    ("GitHub personal access token", re.compile(r"\\bgh[pousr]_[A-Za-z0-9_]{30,}\\b"), "critical"),
-    ("AWS access key", re.compile(r"\\bAKIA[0-9A-Z]{16}\\b"), "critical"),
+    ("GitHub personal access token", re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{30,}\b"), "critical"),
+    ("AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "critical"),
     ("Private key material", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"), "critical"),
-    ("Slack token", re.compile(r"\\bxox[baprs]-[A-Za-z0-9-]{10,}\\b"), "high"),
-    ("JWT-like token", re.compile(r"\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{8,}\\b"), "high"),
-    ("Hard-coded credential assignment", re.compile(r"(?i)\\b(?:api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token)\\b\\s*[:=]\\s*['\"][^'\"]{8,}['\"]"), "high"),
+    ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"), "high"),
+    ("JWT-like token", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{8,}\b"), "high"),
+    ("Hard-coded credential assignment", re.compile(r"(?i)\b(?:api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token)\b\s*[:=]\s*['\"][^'\"]{8,}['\"]"), "high"),
 ]
 
 SAST_PATTERNS = [
-    ("Dynamic code execution", re.compile(r"\\b(?:eval|exec)\\s*\\("), "high", "Untrusted input reaching dynamic execution can lead to code execution. Review the input source and use a safe parser or explicit dispatch."),
-    ("Unsafe deserialization", re.compile(r"\\bpickle\\.(?:loads?|Unpickler)\\s*\\("), "high", "Deserializing untrusted pickle data can execute attacker-controlled code. Use a data-only format for untrusted input."),
-    ("Shell execution", re.compile(r"subprocess\\.(?:run|Popen|call|check_output)\\s*\\([^\\n]*shell\\s*=\\s*True"), "high", "Shell execution with interpolated input can enable command injection. Prefer argument arrays and avoid shell=True."),
-    ("TLS verification disabled", re.compile(r"(?:requests\\.|httpx\\.)[^\\n]*verify\\s*=\\s*False"), "high", "TLS certificate verification is disabled. This can expose traffic to interception."),
-    ("Unsafe YAML loading", re.compile(r"yaml\\.load\\s*\\((?![^\\n]*SafeLoader)"), "medium", "yaml.load without a safe loader may construct arbitrary Python objects. Use yaml.safe_load for untrusted YAML."),
-    ("Weak password hash", re.compile(r"hashlib\\.(?:md5|sha1)\\s*\\("), "medium", "MD5/SHA-1 are unsuitable for password storage. Use Argon2id, scrypt, or bcrypt with an appropriate work factor."),
-    ("Potential SQL string interpolation", re.compile(r"(?i)(?:execute|executemany)\\s*\\(\\s*(?:f['\"]|['\"][^'\"]*%s)"), "high", "SQL built through string interpolation can be injectable. Use parameterized queries."),
-    ("Wildcard CORS", re.compile(r"(?i)(?:allow_origins|Access-Control-Allow-Origin)[^\\n]*(?:\\[\\s*['\"]\\*['\"]|['\"]\\*['\"])"), "medium", "Wildcard CORS may expose browser-accessible APIs to arbitrary origins. Restrict origins where credentials or sensitive data are involved."),
+    ("Dynamic code execution", re.compile(r"\b(?:eval|exec)\s*\("), "high", "Untrusted input reaching dynamic execution can lead to code execution. Review the input source and use a safe parser or explicit dispatch."),
+    ("Unsafe deserialization", re.compile(r"\bpickle\.(?:loads?|Unpickler)\s*\("), "high", "Deserializing untrusted pickle data can execute attacker-controlled code. Use a data-only format for untrusted input."),
+    ("Shell execution", re.compile(r"subprocess\.(?:run|Popen|call|check_output)\s*\([^\n]*shell\s*=\s*True"), "high", "Shell execution with interpolated input can enable command injection. Prefer argument arrays and avoid shell=True."),
+    ("TLS verification disabled", re.compile(r"(?:requests\.|httpx\.)[^\n]*verify\s*=\s*False"), "high", "TLS certificate verification is disabled. This can expose traffic to interception."),
+    ("Unsafe YAML loading", re.compile(r"yaml\.load\s*\((?![^\n]*SafeLoader)"), "medium", "yaml.load without a safe loader may construct arbitrary Python objects. Use yaml.safe_load for untrusted YAML."),
+    ("Weak password hash", re.compile(r"hashlib\.(?:md5|sha1)\s*\("), "medium", "MD5/SHA-1 are unsuitable for password storage. Use Argon2id, scrypt, or bcrypt with an appropriate work factor."),
+    ("Potential SQL string interpolation", re.compile(r"(?i)(?:execute|executemany)\s*\(\s*(?:f['\"]|['\"][^'\"]*%s)"), "high", "SQL built through string interpolation can be injectable. Use parameterized queries."),
+    ("Wildcard CORS", re.compile(r"(?i)(?:allow_origins|Access-Control-Allow-Origin)[^\n]*(?:\[\s*['\"]\*['\"]|['\"]\*['\"])"), "medium", "Wildcard CORS may expose browser-accessible APIs to arbitrary origins. Restrict origins where credentials or sensitive data are involved."),
 ]
 
 def _mask(value: str) -> str:
@@ -87,7 +87,7 @@ def parse_dependencies(files: dict[str, str]) -> list[dict[str, str]]:
                 line = raw.strip()
                 if not line or line.startswith(("#", "-", "git+", "http")):
                     continue
-                match = re.match(r"([A-Za-z0-9_.-]+)(?:\\[[^]]+\\])?\\s*==\\s*([A-Za-z0-9_.+-]+)", line)
+                match = re.match(r"([A-Za-z0-9_.-]+)(?:\[[^]]+\])?\s*==\s*([A-Za-z0-9_.+-]+)", line)
                 if match:
                     package, version = match.groups()
                     deps[("PyPI", package.lower())] = {"ecosystem": "PyPI", "name": package, "version": version, "manifest": path}
@@ -98,7 +98,7 @@ def parse_dependencies(files: dict[str, str]) -> list[dict[str, str]]:
                     for package, raw_version in (data.get(section) or {}).items():
                         version = str(raw_version).strip()
                         version = re.sub(r"^[~^>=<v ]+", "", version)
-                        if re.fullmatch(r"\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?", version):
+                        if re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version):
                             deps[("npm", package.lower())] = {"ecosystem": "npm", "name": package, "version": version, "manifest": path}
             except (ValueError, TypeError):
                 pass
