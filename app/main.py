@@ -32,7 +32,6 @@ APP_NAME = "CODEWHY"
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY", "")
 SARVAM_MODEL = os.getenv("SARVAM_MODEL", "sarvam-105b")
 SARVAM_API_BASE = os.getenv("SARVAM_API_BASE", "https://api.sarvam.ai/v2").rstrip("/")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 MAX_REPO_FILES = int(os.getenv("MAX_REPO_FILES", "350"))
 NEO4J_URI = os.getenv("NEO4J_URI", "")
 NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
@@ -215,8 +214,8 @@ def impact_report(graph: dict[str, Any], path: str) -> dict[str, Any]:
 
 async def github_files(owner: str, repo: str, branch: str | None = None, token: str | None = None) -> tuple[dict[str, str], dict[str, Any]]:
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-    if token or GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {token or GITHUB_TOKEN}"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     async with httpx.AsyncClient(timeout=30, headers=headers, follow_redirects=True) as client:
         meta_resp = await client.get(f"https://api.github.com/repos/{owner}/{repo}")
         if meta_resp.status_code == 404:
@@ -362,7 +361,7 @@ async def get_audit(request: Request, limit: int = 100):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "sarvam_configured": bool(SARVAM_API_KEY), "neo4j_connected": bool(driver), "github_token_configured": bool(GITHUB_TOKEN), "auth_required": AUTH_REQUIRED, "oauth_configured": oauth_ready()}
+    return {"status": "ok", "sarvam_configured": bool(SARVAM_API_KEY), "neo4j_connected": bool(driver), "auth_required": AUTH_REQUIRED, "oauth_configured": oauth_ready()}
 
 @app.get("/api/demo")
 async def demo():
