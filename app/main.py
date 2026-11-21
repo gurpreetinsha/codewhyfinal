@@ -165,6 +165,8 @@ def persist_graph(graph: dict[str, Any]) -> None:
     for edge in graph["edges"]:
         if edge["type"] == "IMPORTS":
             driver.execute_query("MATCH (a:File {id:$source}), (b:File {id:$target}) MERGE (a)-[:IMPORTS]->(b)", source=edge["source"], target=edge["target"], database_=NEO4J_DATABASE)
+        elif edge["type"] == "CALLS":
+            driver.execute_query("MATCH (a:File {id:$source}), (b:Function {id:$target}) MERGE (a)-[:CALLS]->(b)", source=edge["source"], target=edge["target"], database_=NEO4J_DATABASE)
 
 def graph_view(graph: dict[str, Any]) -> dict[str, Any]:
     return {"nodes": graph["nodes"][:180], "edges": graph["edges"][:300], "files": {p: {"lines": info["lines"], "language": info["language"]} for p, info in graph["files"].items()}, "stats": graph["stats"], "metadata": graph["metadata"], "scanned_at": graph["scanned_at"]}
