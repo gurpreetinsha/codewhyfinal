@@ -73,3 +73,45 @@ def test_github_oauth_start_uses_short_lived_browser_state_cookie(monkeypatch):
     rejected = client.get("/api/auth/callback", params={"code": "fake-code", "state": "attacker-state"})
     assert rejected.status_code == 400
     assert "state" in rejected.json()["detail"].lower()
+
+
+def test_github_repo_listing_requires_session_and_returns_minimal_repo_data(monkeypatch):
+    import asyncio
+    from fastapi.testclient import TestClient
+    from app import main
+
+    monkeypatch.setattr(main, "AUTH_REQUIRED", False)
+    client = TestClient(main.app)
+    denied = client.get("/api/github/repos")
+    assert denied.status_code == 401
+
+    async def fake_get(url, **kwargs):
+        class Response:
+            status_code = 200
+            def json(self):
+                return [{
+                    "id": 123, "full_name": "octo/private-project", "name": "private-project",
+                    "description": "test", "private": True, "default_branch": "main",
+                    "language": "Python", "stargazers_count": 4, "html_url": "https://github.com/octo/private-project",
+                    "updated_at": "2026-01-01T00:00:00Z", "permissions": {"push": True, "admin": False}
+                }]
+        return Response()
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): return False
+        get = fake_get
+
+    monkeypatch.setattr(main.httpx, "AsyncClient", FakeClient)
+    client.cookies.set(main.SESSION_COOKIE, "fake-session")
+    monkeypatch.setattr(main, "get_session", lambda sid: {
+        "id": 1, "login": "octo", "avatar_url": "", "role": "developer",
+        "access_token": "token", "csrf_hash": "", "expires_at": 9999999999
+    })
+    response = client.get("/api/github/repos")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["repositories"][0]["full_name"] == "octo/private-project"
+    assert payload["repositories"][0]["private"] is True
+    assert payload["repositories"][0]["permissions"]["push"] is True
