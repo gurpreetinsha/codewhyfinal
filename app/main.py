@@ -194,7 +194,7 @@ def persist_graph(graph: dict[str, Any]) -> None:
             driver.execute_query("MATCH (r:Repository {id:$repo}) MERGE (f:File {id:$id}) SET f.path=$path, f.label=$label, f.language=$language, f.lines=$lines MERGE (r)-[:CONTAINS]->(f)", repo=repo_id, id=node["id"], path=node["path"], label=node["label"], language=node["language"], lines=node["lines"], database_=NEO4J_DATABASE)
         else:
             label = "Function" if node["type"] == "function" else "CodeClass"
-            driver.execute_query(f"MATCH (r:Repository {{id:$repo}})-[:CONTAINS]->(f:File {{path:$path}}) MERGE (n:{label} {{id:$id}}) SET n.name=$name, n.line=$line MERGE (f)-[:DEFINES]->(n)", repo=repo_id, path=node["path"], id=node["id"], name=node["label"], line=node.get("line", 0), database_=NEO4J_DATABASE)
+            driver.execute_query(f"MATCH (r:Repository {{id:$repo}})-[:CONTAINS]->(f:File {{path:$path}}) MERGE (n:{label} {{id:$id}}) SET n.name=$name, n.path=$path, n.line=$line MERGE (f)-[:DEFINES]->(n)", repo=repo_id, path=node["path"], id=node["id"], name=node["label"], line=node.get("line", 0), database_=NEO4J_DATABASE)
     for edge in graph["edges"]:
         if edge["type"] == "IMPORTS":
             driver.execute_query("MATCH (a:File {id:$source}), (b:File {id:$target}) MERGE (a)-[:IMPORTS]->(b)", source=edge["source"], target=edge["target"], database_=NEO4J_DATABASE)
@@ -219,21 +219,58 @@ def debt_report(graph: dict[str, Any]) -> list[dict[str, Any]]:
             out.append({"severity": "low", "title": "Test coverage not detected", "path": path, "detail": "No convention-matched test file was detected. This is a heuristic, not proof of missing tests.", "evidence": "Path-based heuristic"})
     return out[:80]
 
+def neo4j_graph_context(repo_id: str, paths: set[str]) -> list[dict[str, Any]]:
+    if not driver or not paths:
+        return []
+    try:
+        result = driver.execute_query(
+            "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(f:File) "
+            "WHERE f.path IN $paths "
+            "OPTIONAL MATCH (f)-[rel:IMPORTS|CALLS|DEFINES]-(neighbor) "
+            "RETURN f.path AS file, type(rel) AS relationship, labels(neighbor) AS labels, "
+            "neighbor.path AS neighbor_path, neighbor.name AS neighbor_name LIMIT 100",
+            repo=repo_id, paths=list(paths), database_=NEO4J_DATABASE
+        )
+        return [dict(record) for record in result.records if record.get("relationship")]
+    except Exception as exc:
+        print(f"[CODEWHY] Neo4j context query failed: {exc}")
+        return []
+
+
 def impact_report(graph: dict[str, Any], path: str) -> dict[str, Any]:
     if path not in graph["files"]:
         raise HTTPException(404, "File not found in scanned repository")
+    if driver:
+        try:
+            direct_result = driver.execute_query(
+                "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(target:File {path:$path}) "
+                "MATCH (r)-[:CONTAINS]->(dependent:File)-[:IMPORTS]->(target) "
+                "RETURN collect(DISTINCT dependent.path) AS paths",
+                repo=graph["id"], path=path, database_=NEO4J_DATABASE
+            )
+            transitive_result = driver.execute_query(
+                "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(target:File {path:$path}) "
+                "MATCH (r)-[:CONTAINS]->(dependent:File)-[:IMPORTS*1..8]->(target) "
+                "RETURN collect(DISTINCT dependent.path) AS paths",
+                repo=graph["id"], path=path, database_=NEO4J_DATABASE
+            )
+            direct = sorted(direct_result.records[0]["paths"]) if direct_result.records else []
+            transitive = sorted(set(transitive_result.records[0]["paths"]) - {path}) if transitive_result.records else []
+            return {"path": path, "direct_dependents": direct, "transitive_dependents": transitive, "count": len(transitive), "source": "neo4j", "note": "Impact is computed from persisted Neo4j IMPORTS relationships; dynamic imports and runtime behaviour may not be represented."}
+        except Exception as exc:
+            print(f"[CODEWHY] Neo4j impact query failed; using in-memory graph: {exc}")
     reverse = defaultdict(set)
-    for e in graph["edges"]:
-        if e["type"] == "IMPORTS":
-            reverse[e.get("target_path", e["target"].removeprefix("file:"))].add(e.get("source_path", e["source"].removeprefix("file:")) )
+    for edge in graph["edges"]:
+        if edge["type"] == "IMPORTS":
+            reverse[edge.get("target_path", edge["target"].removeprefix("file:"))].add(edge.get("source_path", edge["source"].removeprefix("file:")))
     seen, queue = set(), [path]
     while queue:
-        cur = queue.pop(0)
-        for parent in reverse.get(cur, set()):
+        current = queue.pop(0)
+        for parent in reverse.get(current, set()):
             if parent not in seen and parent != path:
                 seen.add(parent)
                 queue.append(parent)
-    return {"path": path, "direct_dependents": sorted(reverse.get(path, set())), "transitive_dependents": sorted(seen), "count": len(seen), "note": "Impact is inferred from statically detected import relationships; dynamic imports and runtime behaviour may not be represented."}
+    return {"path": path, "direct_dependents": sorted(reverse.get(path, set())), "transitive_dependents": sorted(seen), "count": len(seen), "source": "in_memory", "note": "Impact is inferred from statically detected import relationships; dynamic imports and runtime behaviour may not be represented."}
 
 async def github_files(owner: str, repo: str, branch: str | None = None, token: str | None = None) -> tuple[dict[str, str], dict[str, Any]]:
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
@@ -636,7 +673,10 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
     evidence = [{"path": p, "lines": graph["files"][p]["lines"], "excerpt": graph["files"][p]["content"][:1800]} for p in sorted(evidence_paths) if p in graph["files"]]
     graph_edges = [e for e in graph["edges"] if e.get("source_path") in evidence_paths or e.get("target_path") in evidence_paths][:35]
     context = "\n\n".join(f"FILE: {e['path']} ({e['lines']} lines)\n{e['excerpt']}" for e in evidence)
-    context += "\nGRAPH RELATIONSHIPS (static-analysis evidence):\n" + json.dumps(graph_edges[:35])
+    context += "\nIN-MEMORY GRAPH RELATIONSHIPS (static-analysis evidence):\n" + json.dumps(graph_edges[:35])
+    persisted_context = neo4j_graph_context(repo_id, evidence_paths)
+    if persisted_context:
+        context += "\nNEO4J GRAPH NEIGHBOURHOOD (persisted relationships):\n" + json.dumps(persisted_context)
     steps = [
         {"step": "Question decomposition", "detail": "Extracted technical terms and likely repository concepts from the investigation question."},
         {"step": "Evidence retrieval", "detail": f"Selected {len(evidence)} source files using lexical relevance and repository paths."},
