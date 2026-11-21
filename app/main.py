@@ -480,6 +480,37 @@ async def get_history(repo_id: str, path: str, request: Request):
             commits.append({"sha": item.get("sha", "")[:8], "message": (commit.get("message") or "").splitlines()[0], "author": author.get("name", "Unknown"), "date": author.get("date", ""), "url": item.get("html_url", "")})
         return {"commits": commits, "note": "Commit messages are historical evidence, not guaranteed explanations of original intent."}
 
+def attack_path_report(graph: dict[str, Any], findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    source_patterns = [re.compile(r"@(?:app|router)\\.(?:get|post|put|patch|delete)\\s*\\("), re.compile(r"\\bapp\\.route\\s*\\("), re.compile(r"\\b(?:req\\.body|request\\.json|request\\.form|request\\.query_params)\\b")]
+    sink_patterns = [re.compile(r"\\b(?:eval|exec)\\s*\\("), re.compile(r"subprocess\\.(?:run|Popen|call)\\s*\\("), re.compile(r"\\bpickle\\.loads?\\s*\\("), re.compile(r"\\byaml\\.load\\s*\\("), re.compile(r"\\.execute\\s*\\(")]
+    sources, sinks = set(), set()
+    for path, info in graph["files"].items():
+        content = info["content"]
+        if any(pattern.search(content) for pattern in source_patterns):
+            sources.add(path)
+        if any(pattern.search(content) for pattern in sink_patterns):
+            sinks.add(path)
+    adjacency = defaultdict(set)
+    for edge in graph["edges"]:
+        if edge["type"] == "IMPORTS":
+            adjacency[edge["source"].removeprefix("file:")].add(edge["target"].removeprefix("file:"))
+    paths = []
+    for source in sorted(sources):
+        queue = [(source, [source])]
+        visited = {source}
+        while queue:
+            current, chain = queue.pop(0)
+            if current in sinks and current != source:
+                paths.append({"source_file": source, "sink_file": current, "path": chain, "classification": "potential_static_route", "evidence": "A route/input-like source and a risky sink are connected by import edges. This does not prove data flow or exploitability."})
+                break
+            for nxt in sorted(adjacency.get(current, set())):
+                if nxt not in visited and len(chain) < 7:
+                    visited.add(nxt)
+                    queue.append((nxt, chain + [nxt]))
+        if len(paths) >= 20:
+            break
+    return paths
+
 @app.post("/api/voice/transcribe")
 async def voice_transcribe(file: UploadFile = File(...), mode: str = Form("codemix")):
     if not SARVAM_API_KEY:
@@ -515,7 +546,7 @@ async def voice_speak(req: SpeechSynthesisRequest):
             response = await client.post(
                 "https://api.sarvam.ai/text-to-speech",
                 headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"},
-                json={"text": req.text, "target_language_code": req.language_code, "model": "bulbul:v4-flash", "speaker": "shubh_enhi_ads", "enable_preprocessing": True},
+                json={"text": req.text, "language_code": req.language_code, "model": "bulbul:v4-flash", "speaker": "shubh_enhi_ads", "enable_preprocessing": True},
             )
             response.raise_for_status()
             data = response.json()
@@ -534,6 +565,7 @@ async def run_security_scan(repo_id: str, request: Request):
         raise HTTPException(404, "Repository not found. Scan it first.")
     report = await security_report({p: info["content"] for p, info in graph["files"].items()})
     report["repository"] = graph["metadata"].get("full_name", repo_id)
+    report["attack_paths"] = attack_path_report(graph, report["findings"])
     report["scanned_at"] = int(time.time())
     audit(getattr(request.state, "user", None), "security.scan", repo_id, f"{report['summary']['total']} findings")
     return report
@@ -626,6 +658,9 @@ async def review_pull_request(repo_id: str, req: PullRequestReviewRequest, reque
     graph = REPOS.get(repo_id)
     if not graph:
         raise HTTPException(404, "Scan the base repository first.")
+    user = getattr(request.state, "user", None)
+    if AUTH_REQUIRED and user and user["role"] not in {"reviewer", "admin"}:
+        raise HTTPException(403, "Reviewer or administrator role required for PR review.")
     match = re.match(r"^https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/(\d+)", req.url.strip())
     if not match:
         raise HTTPException(400, "Enter a GitHub pull request URL.")
