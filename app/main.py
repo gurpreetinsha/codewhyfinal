@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 from dotenv import load_dotenv
+load_dotenv()
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
@@ -26,8 +27,6 @@ try:
     from neo4j import GraphDatabase
 except ImportError:
     GraphDatabase = None
-
-load_dotenv()
 
 APP_NAME = "CODEWHY"
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY", "")
