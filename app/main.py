@@ -56,6 +56,7 @@ if NEO4J_URI and NEO4J_PASSWORD and GraphDatabase:
 REPOS: dict[str, dict[str, Any]] = {}
 INVESTIGATIONS: dict[str, list[dict[str, Any]]] = defaultdict(list)
 REPO_OWNERS: dict[str, str] = {}
+RATE_BUCKETS: dict[str, list[float]] = defaultdict(list)
 OAUTH_STATES: dict[str, int] = {}
 init_auth_db()
 if AUTH_REQUIRED and not oauth_ready():
@@ -279,6 +280,17 @@ class SpeechSynthesisRequest(BaseModel):
 @app.middleware("http")
 async def auth_and_tenant_middleware(request: Request, call_next):
     path = request.url.path
+    if path.startswith("/api/") and path not in {"/api/health", "/api/auth/status"}:
+        client_ip = request.client.host if request.client else "unknown"
+        expensive = any(x in path for x in ("/scan", "/investigate", "/change-simulate", "/pull-request/review", "/voice/"))
+        limit = 8 if expensive else 120
+        key = client_ip + ":" + ("expensive" if expensive else "general")
+        now = time.time()
+        RATE_BUCKETS[key] = [stamp for stamp in RATE_BUCKETS[key] if now - stamp < 60]
+        if len(RATE_BUCKETS[key]) >= limit:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "Rate limit exceeded. Please wait before retrying."}, status_code=429, headers={"Retry-After": "60"})
+        RATE_BUCKETS[key].append(now)
     sid = request.cookies.get(SESSION_COOKIE, "")
     user = get_session(sid) if sid else None
     request.state.user = user
@@ -481,8 +493,8 @@ async def get_history(repo_id: str, path: str, request: Request):
         return {"commits": commits, "note": "Commit messages are historical evidence, not guaranteed explanations of original intent."}
 
 def attack_path_report(graph: dict[str, Any], findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    source_patterns = [re.compile(r"@(?:app|router)\\.(?:get|post|put|patch|delete)\\s*\\("), re.compile(r"\\bapp\\.route\\s*\\("), re.compile(r"\\b(?:req\\.body|request\\.json|request\\.form|request\\.query_params)\\b")]
-    sink_patterns = [re.compile(r"\\b(?:eval|exec)\\s*\\("), re.compile(r"subprocess\\.(?:run|Popen|call)\\s*\\("), re.compile(r"\\bpickle\\.loads?\\s*\\("), re.compile(r"\\byaml\\.load\\s*\\("), re.compile(r"\\.execute\\s*\\(")]
+    source_patterns = [re.compile(r"@(?:app|router)\.(?:get|post|put|patch|delete)\s*\("), re.compile(r"\bapp\.route\s*\("), re.compile(r"\b(?:req\.body|request\.json|request\.form|request\.query_params)\b")]
+    sink_patterns = [re.compile(r"\b(?:eval|exec)\s*\("), re.compile(r"subprocess\.(?:run|Popen|call)\s*\("), re.compile(r"\bpickle\.loads?\s*\("), re.compile(r"\byaml\.load\s*\("), re.compile(r"\.execute\s*\(")]
     sources, sinks = set(), set()
     for path, info in graph["files"].items():
         content = info["content"]
