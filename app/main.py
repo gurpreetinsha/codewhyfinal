@@ -18,6 +18,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.security import security_report, scan_source
+
 try:
     from neo4j import GraphDatabase
 except ImportError:
@@ -52,6 +54,7 @@ if NEO4J_URI and NEO4J_PASSWORD and GraphDatabase:
 
 # In-memory fallback keeps the product usable for a zero-credential demo.
 REPOS: dict[str, dict[str, Any]] = {}
+INVESTIGATIONS: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
 DEMO_FILES = {
     "README.md": "# Atlas Commerce\nA small commerce API demo.\n",
@@ -252,6 +255,16 @@ class AskRequest(BaseModel):
 class ImpactRequest(BaseModel):
     path: str
 
+class InvestigationRequest(BaseModel):
+    question: str = Field(min_length=5, max_length=2000)
+
+class ChangeSimulationRequest(BaseModel):
+    description: str = Field(min_length=5, max_length=2000)
+    diff: str = Field(min_length=5, max_length=100000)
+
+class PullRequestReviewRequest(BaseModel):
+    url: str = Field(min_length=15, max_length=500)
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "sarvam_configured": bool(SARVAM_API_KEY), "neo4j_connected": bool(driver), "github_token_configured": bool(GITHUB_TOKEN)}
@@ -364,6 +377,129 @@ async def get_history(repo_id: str, path: str):
             author = commit.get("author") or {}
             commits.append({"sha": item.get("sha", "")[:8], "message": (commit.get("message") or "").splitlines()[0], "author": author.get("name", "Unknown"), "date": author.get("date", ""), "url": item.get("html_url", "")})
         return {"commits": commits, "note": "Commit messages are historical evidence, not guaranteed explanations of original intent."}
+
+@app.post("/api/repos/{repo_id:path}/security/scan")
+async def run_security_scan(repo_id: str):
+    graph = REPOS.get(repo_id)
+    if not graph:
+        raise HTTPException(404, "Repository not found. Scan it first.")
+    report = await security_report({p: info["content"] for p, info in graph["files"].items()})
+    report["repository"] = graph["metadata"].get("full_name", repo_id)
+    report["scanned_at"] = int(time.time())
+    return report
+
+@app.post("/api/repos/{repo_id:path}/investigate")
+async def autonomous_investigate(repo_id: str, req: InvestigationRequest):
+    graph = REPOS.get(repo_id)
+    if not graph:
+        raise HTTPException(404, "Repository not found. Scan it first.")
+    terms = [t for t in re.findall(r"[a-z_][a-z0-9_]{2,}", req.question.lower()) if t not in {"what", "why", "how", "does", "could", "would", "should", "this", "that", "with", "from", "into", "code", "file"}]
+    scored = []
+    for path, info in graph["files"].items():
+        haystack = (path + " " + info["content"]).lower()
+        score = sum(3 for term in terms if term in path.lower()) + sum(1 for term in terms if term in haystack)
+        if score:
+            scored.append((score, path, info))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    selected = scored[:5] or [(0, p, i) for p, i in list(graph["files"].items())[:4]]
+    evidence_paths = {p for _, p, _ in selected}
+    for edge in graph["edges"]:
+        if edge["type"] == "IMPORTS":
+            src = edge["source"].removeprefix("file:")
+            dst = edge["target"].removeprefix("file:")
+            if src in evidence_paths or dst in evidence_paths:
+                evidence_paths.update((src, dst))
+    evidence_paths = set(list(evidence_paths)[:9])
+    evidence = [{"path": p, "lines": graph["files"][p]["lines"], "excerpt": graph["files"][p]["content"][:1800]} for p in sorted(evidence_paths) if p in graph["files"]]
+    graph_edges = [e for e in graph["edges"] if e["source"].removeprefix("file:") in evidence_paths or e["target"].removeprefix("file:") in evidence_paths][:35]
+    context = "\n\n".join(f"FILE: {e['path']} ({e['lines']} lines)\n{e['excerpt']}" for e in evidence)
+    context += "\nGRAPH RELATIONSHIPS (static-analysis evidence):\n" + json.dumps(graph_edges[:35])
+    steps = [
+        {"step": "Question decomposition", "detail": "Extracted technical terms and likely repository concepts from the investigation question."},
+        {"step": "Evidence retrieval", "detail": f"Selected {len(evidence)} source files using lexical relevance and repository paths."},
+        {"step": "Graph expansion", "detail": f"Expanded evidence across import relationships; inspected {len(graph_edges)} nearby graph edges."},
+        {"step": "Evidence synthesis", "detail": "Asked the configured language model to distinguish observed code from inferred intent."}
+    ]
+    answer, provider = await sarvam_answer(req.question, context)
+    cited = [e["path"] for e in evidence if e["path"] in answer]
+    verification = {
+        "status": "evidence_referenced" if cited else "needs_review",
+        "cited_files": cited,
+        "retrieved_files": [e["path"] for e in evidence],
+        "note": "This is a traceability check, not proof that every natural-language claim is true. Review the cited source before relying on the conclusion."
+    }
+    record = {"id": hashlib.sha256(f"{repo_id}:{time.time_ns()}:{req.question}".encode()).hexdigest()[:16], "question": req.question, "answer": answer, "provider": provider, "evidence": evidence, "steps": steps, "verification": verification, "created_at": int(time.time())}
+    INVESTIGATIONS[repo_id].insert(0, record)
+    INVESTIGATIONS[repo_id] = INVESTIGATIONS[repo_id][:100]
+    return record
+
+@app.get("/api/repos/{repo_id:path}/investigations")
+async def investigation_history(repo_id: str):
+    if repo_id not in REPOS:
+        raise HTTPException(404, "Repository not found")
+    return {"items": INVESTIGATIONS.get(repo_id, [])}
+
+@app.get("/api/repos/{repo_id:path}/reports")
+async def repository_report(repo_id: str):
+    graph = REPOS.get(repo_id)
+    if not graph:
+        raise HTTPException(404, "Repository not found")
+    return {
+        "generated_at": int(time.time()),
+        "repository": graph["metadata"],
+        "statistics": graph["stats"],
+        "technical_debt": debt_report(graph),
+        "investigations": INVESTIGATIONS.get(repo_id, [])[:20],
+        "limitations": ["Static analysis cannot establish runtime exploitability.", "Dependency checks cover supported exact-version manifests and the OSV database.", "Dynamic imports and external runtime configuration may be missed."]
+    }
+
+@app.post("/api/repos/{repo_id:path}/change-simulate")
+async def simulate_change(repo_id: str, req: ChangeSimulationRequest):
+    graph = REPOS.get(repo_id)
+    if not graph:
+        raise HTTPException(404, "Repository not found")
+    changed = sorted(set(re.findall(r"^\+\+\+ b/(.+)$", req.diff, re.M)))
+    impacted = [impact_report(graph, path) for path in changed if path in graph["files"]]
+    proposed_findings = scan_source({"proposed-change.diff": req.diff})
+    context = "CHANGE DESCRIPTION:\n" + req.description + "\nPROPOSED DIFF:\n" + req.diff[:18000]
+    context += "\nCURRENT REPOSITORY IMPACT:\n" + json.dumps(impacted)
+    context += "\nSTATIC SECURITY PATTERN FINDINGS IN DIFF:\n" + json.dumps(proposed_findings[:30])
+    answer, provider = await sarvam_answer("Review this proposed change. Explain behaviour changes, compatibility risks, affected modules, security concerns, and tests to run. Clearly label unknowns. " + req.description, context)
+    return {"description": req.description, "changed_paths": changed, "impact": impacted, "security_findings": proposed_findings, "answer": answer, "provider": provider, "disclaimer": "This is a static preflight review, not execution, formal verification, or a guarantee that the patch is safe."}
+
+@app.post("/api/repos/{repo_id:path}/pull-request/review")
+async def review_pull_request(repo_id: str, req: PullRequestReviewRequest):
+    graph = REPOS.get(repo_id)
+    if not graph:
+        raise HTTPException(404, "Scan the base repository first.")
+    match = re.match(r"^https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/(\d+)", req.url.strip())
+    if not match:
+        raise HTTPException(400, "Enter a GitHub pull request URL.")
+    owner, repo, number = match.groups()
+    expected = graph["metadata"].get("full_name", "").lower()
+    if expected and expected != f"{owner}/{repo}".lower():
+        raise HTTPException(400, "The pull request must belong to the scanned repository.")
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    async with httpx.AsyncClient(timeout=30, headers=headers) as client:
+        response = await client.get(f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}/files", params={"per_page": 100})
+        if response.status_code >= 400:
+            raise HTTPException(response.status_code, "Could not retrieve pull request files. Check repository access and GitHub rate limits.")
+        pr_files = response.json()
+    changed = []
+    diff_parts = []
+    for item in pr_files[:80]:
+        patch = item.get("patch") or ""
+        changed.append({"path": item.get("filename"), "status": item.get("status"), "additions": item.get("additions", 0), "deletions": item.get("deletions", 0), "changes": item.get("changes", 0)})
+        if patch:
+            diff_parts.append(f"FILE: {item.get('filename')} | STATUS: {item.get('status')}\n{patch[:6000]}")
+    diff = "\n\n".join(diff_parts)
+    findings = scan_source({"pull-request.patch": diff})
+    impacts = [impact_report(graph, item["path"]) for item in changed if item["path"] in graph["files"]]
+    context = "PULL REQUEST FILES:\n" + json.dumps(changed) + "\nDIFF PATCHES:\n" + diff[:20000] + "\nDEPENDENCY IMPACT:\n" + json.dumps(impacts) + "\nSTATIC SECURITY PATTERNS:\n" + json.dumps(findings[:35])
+    answer, provider = await sarvam_answer("Act as a cautious senior security-minded code reviewer. Review this pull request for correctness, regressions, security, dependency and test risks. Prioritise actionable findings and cite changed file paths. Do not claim tests ran.", context)
+    return {"pull_request": req.url, "files": changed, "impact": impacts, "security_findings": findings, "review": answer, "provider": provider, "limitations": ["GitHub omits patch text for some large or binary files.", "Only the returned PR file patches are analysed.", "No tests are executed and no merge decision is made automatically."]}
 
 @app.get("/api/repos/{repo_id:path}/file")
 async def get_file(repo_id: str, path: str):
