@@ -50,3 +50,26 @@ def test_security_scan_timeline_tracks_new_unchanged_and_resolved_findings(tmp_p
     assert third["resolved_count"] == 1
     history = auth.load_security_scans("alice::org/repo")
     assert [item["created_at"] for item in history] == [300, 200, 100]
+
+
+def test_github_oauth_start_uses_short_lived_browser_state_cookie(monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+    from fastapi.testclient import TestClient
+    from app import main
+
+    monkeypatch.setattr(main, "oauth_ready", lambda: True)
+    monkeypatch.setattr(main, "OAUTH_CLIENT_ID", "test-client")
+    monkeypatch.setattr(main, "OAUTH_REDIRECT_URI", "https://codewhy.example/api/auth/callback")
+    client = TestClient(main.app, follow_redirects=False)
+
+    response = client.get("/api/auth/github")
+    assert response.status_code == 302
+    state = parse_qs(urlparse(response.headers["location"]).query)["state"][0]
+    cookie = response.cookies.get(main.OAUTH_STATE_COOKIE)
+    assert cookie == state
+    assert "httponly" in response.headers["set-cookie"].lower()
+    assert "max-age=600" in response.headers["set-cookie"].lower()
+
+    rejected = client.get("/api/auth/callback", params={"code": "fake-code", "state": "attacker-state"})
+    assert rejected.status_code == 400
+    assert "state" in rejected.json()["detail"].lower()
