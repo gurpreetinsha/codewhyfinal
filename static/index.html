@@ -123,6 +123,7 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function setLoading(el,on){el.classList.toggle('loading',on)}
 async function loadDemo(){try{const d=await api('/api/demo');render(d);$('mode-pill').textContent='DEMO WORKSPACE';toast('Demo codebase loaded')}catch(e){toast(e.message)}}
 async function loadGitHubRepos(){
+  $('github-repos-card').dataset.connected='true';
   const card=$('github-repos-card');if(!card||!state.authenticated)return;
   card.style.display='block';$('github-repo-count').textContent='LOADING';
   $('github-repo-list').innerHTML='<div class="empty">Fetching repositories from GitHub…</div>';
@@ -193,6 +194,7 @@ $('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').
   const duplicateIds=['security-section','investigate-section','pr-section','change-section','history-section'];
   duplicateIds.forEach(id=>{const matches=[...document.querySelectorAll('[id="'+id+'"]')];matches.slice(1).forEach(node=>node.remove())});
   const hero=document.querySelector('.hero'),connect=document.querySelector('.connect'),stats=document.querySelector('.stats');
+  const githubReposCard=$('github-repos-card');
   const layout=document.querySelector('.main > .layout');
   const graphCard=$('graph-card'),rightcol=document.querySelector('.rightcol');
   const debtCard=rightcol?.children[0],filesCard=rightcol?.children[1];
@@ -210,14 +212,16 @@ $('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').
     history:[$('history-section')],
     commits:[commitSection]
   };
-  const all=[hero,connect,stats,layout,$('ask-card'),$('security-section'),$('investigate-section'),$('pr-section'),$('change-section'),$('history-section'),commitSection,...overviewOnly].filter(Boolean);
+  const all=[hero,connect,stats,layout,$('ask-card'),$('security-section'),$('investigate-section'),$('pr-section'),$('change-section'),$('history-section'),commitSection,githubReposCard,...overviewOnly].filter(Boolean);
   function activate(name){
     all.forEach(node=>node.style.display='none');
     if(rightcol)rightcol.style.display='none';
     if(graphCard)graphCard.style.display='none';
+    if(githubReposCard)githubReposCard.style.display='none';
     Object.entries(views).forEach(([key,nodes])=>{
       if(key!==name)return;
       nodes.forEach(node=>{if(node)node.style.display=''});
+      if(key==='overview'&&githubReposCard&&githubReposCard.dataset.connected==='true')githubReposCard.style.display='';
     });
     if(name==='graph'&&layout){layout.style.display='grid';layout.style.gridTemplateColumns='minmax(0,1fr) minmax(260px,.65fr)';if(rightcol)rightcol.style.display='grid';if(debtCard)debtCard.style.display='none';if(filesCard)filesCard.style.display='';}
     if(name==='debt'&&layout){layout.style.display='grid';layout.style.gridTemplateColumns='minmax(0,1fr)';if(rightcol)rightcol.style.display='grid';if(debtCard)debtCard.style.display='';if(filesCard)filesCard.style.display='none';}
