@@ -55,3 +55,26 @@ def test_anonymous_repository_workspaces_are_isolated():
     path = "/api/repos/" + first_repo + "/graph"
     assert first_client.get(path).status_code == 200
     assert second_client.get(path).status_code == 404
+
+
+def test_commit_history_endpoint_for_demo_workspace_returns_guidance():
+    client = TestClient(app)
+    demo = client.get("/api/demo")
+    assert demo.status_code == 200
+    repo_id = demo.json()["id"]
+
+    response = client.get(f"/api/repos/{repo_id}/commits")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["commits"] == []
+    assert "GitHub repositories" in payload["note"]
+
+
+def test_commit_history_limit_is_bounded():
+    # The route clamps the requested page size before forwarding it to GitHub.
+    import inspect
+    from app.main import get_repository_commits
+
+    source = inspect.getsource(get_repository_commits)
+    assert "min(limit, 100)" in source
+    assert "max(1, min(limit, 100))" in source
