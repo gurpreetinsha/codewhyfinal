@@ -190,6 +190,9 @@ async def security_report(files: dict[str, str]) -> dict[str, Any]:
         "recommendation": ("Upgrade to " + ", ".join(v["fixed_versions"]) if v["fixed_versions"] else "Review the advisory and update to a verified patched release."),
         "confidence": "known_advisory", "details": v,
     } for v in vulnerabilities]
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    findings.sort(key=lambda item: (severity_order.get(item["severity"], 9), item.get("path", ""), item.get("line") or 0))
+    findings = findings[:500]
     counts = {level: sum(1 for f in findings if f["severity"] == level) for level in ("critical", "high", "medium", "low")}
     score = max(0, 100 - counts["critical"] * 25 - counts["high"] * 12 - counts["medium"] * 5 - counts["low"] * 1)
     return {
