@@ -552,6 +552,7 @@ async def ask(repo_id: str, req: AskRequest):
             security_data["attack_paths"] = attack_path_report(graph, security_data["findings"])
             SECURITY_REPORTS[repo_id] = security_data
         context += "\nRELATED SECURITY FINDINGS:\n" + json.dumps([item for item in security_data["findings"] if item.get("path") in {e["path"] for e in evidence} or item.get("category") == "dependency"][:25])
+        context += "\nPOTENTIAL ATTACK PATH CANDIDATES:\n" + json.dumps([item for item in security_data.get("attack_paths", []) if item.get("source_file") in {e["path"] for e in evidence} or item.get("sink_file") in {e["path"] for e in evidence}][:10])
     answer, provider = await sarvam_answer(req.question, context)
     return {"answer": answer, "provider": provider, "evidence": [{"path": e["path"], "lines": e["lines"], "relevance": e["relevance"]} for e in evidence], "disclaimer": "Answers are grounded in the retrieved source excerpts. Static analysis can miss dynamic behaviour and external context."}
 
@@ -739,6 +740,7 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
         security_context = [item for item in security_report_data["findings"] if item.get("path") in evidence_paths or item.get("category") == "dependency"][:30]
         if security_context:
             context += "\nRELATED SECURITY FINDINGS (static/advisory evidence):\n" + json.dumps(security_context)
+            context += "\nPOTENTIAL ATTACK PATH CANDIDATES:\n" + json.dumps([item for item in security_report_data.get("attack_paths", []) if item.get("source_file") in evidence_paths or item.get("sink_file") in evidence_paths][:10])
     steps = [
         {"step": "Question decomposition", "detail": "Extracted technical terms and likely repository concepts from the investigation question."},
         {"step": "Evidence retrieval", "detail": f"Selected {len(evidence)} source files using lexical relevance and repository paths."},
