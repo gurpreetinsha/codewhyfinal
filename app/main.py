@@ -465,8 +465,8 @@ async def get_history(repo_id: str, path: str, request: Request):
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     user = getattr(request.state, "user", None)
     token = user.get("access_token") if user else None
-    if token or GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {token or GITHUB_TOKEN}"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     async with httpx.AsyncClient(timeout=20, headers=headers) as client:
         response = await client.get(f"https://api.github.com/repos/{full_name}/commits", params={"path": path, "per_page": 8})
         if response.status_code == 404:
@@ -636,8 +636,8 @@ async def review_pull_request(repo_id: str, req: PullRequestReviewRequest, reque
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     user = getattr(request.state, "user", None)
     token = user.get("access_token") if user else None
-    if token or GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {token or GITHUB_TOKEN}"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     async with httpx.AsyncClient(timeout=30, headers=headers) as client:
         response = await client.get(f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}/files", params={"per_page": 100})
         if response.status_code >= 400:
