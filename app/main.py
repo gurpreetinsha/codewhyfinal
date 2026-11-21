@@ -99,10 +99,33 @@ def _parse_file(path: str, content: str) -> dict[str, Any]:
         except SyntaxError:
             result["parse_error"] = True
     else:
-        result["functions"] = [{"name": n, "line": i + 1, "end_line": i + 1, "args": 0} for i, n in enumerate(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?:=\s*)?(?:async\s*)?\(", content))]
-        result["classes"] = [{"name": n, "line": i + 1} for i, n in enumerate(re.findall(r"class\s+([A-Za-z_$][\w$]*)", content))]
-        result["imports"] = re.findall(r"(?:from\s+['\"]([^'\"]+)['\"]|require\(['\"]([^'\"]+)['\"]\))", content)
-        result["imports"] = [x[0] or x[1] for x in result["imports"]]
+        if ext in {".js", ".jsx", ".ts", ".tsx"}:
+            function_pattern = re.compile(r"(?:function\s+([A-Za-z_$][\w$]*)\s*\(|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)")
+            for match in function_pattern.finditer(content):
+                result["functions"].append({"name": match.group(1) or match.group(2), "line": content.count("\n", 0, match.start()) + 1, "end_line": content.count("\n", 0, match.start()) + 1, "args": 0})
+            for match in re.finditer(r"class\s+([A-Za-z_$][\w$]*)", content):
+                result["classes"].append({"name": match.group(1), "line": content.count("\n", 0, match.start()) + 1})
+            result["imports"] = re.findall(r"(?:from\s+['\"]([^'\"]+)['\"]|require\(['\"]([^'\"]+)['\"]\))", content)
+            result["imports"] = [x[0] or x[1] for x in result["imports"]]
+        elif ext == ".go":
+            for match in re.finditer(r"func\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)\s*\(", content):
+                result["functions"].append({"name": match.group(1), "line": content.count("\n", 0, match.start()) + 1, "end_line": content.count("\n", 0, match.start()) + 1, "args": 0})
+            for match in re.finditer(r"type\s+([A-Za-z_]\w*)\s+(?:struct|interface)", content):
+                result["classes"].append({"name": match.group(1), "line": content.count("\n", 0, match.start()) + 1})
+            result["imports"] = re.findall(r'^\s*"([^"]+)"\s*$', content, re.M)
+        elif ext == ".rs":
+            for match in re.finditer(r"(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)\s*\(", content):
+                result["functions"].append({"name": match.group(1), "line": content.count("\n", 0, match.start()) + 1, "end_line": content.count("\n", 0, match.start()) + 1, "args": 0})
+            for match in re.finditer(r"(?:pub\s+)?(?:struct|enum|trait)\s+([A-Za-z_]\w*)", content):
+                result["classes"].append({"name": match.group(1), "line": content.count("\n", 0, match.start()) + 1})
+            result["imports"] = re.findall(r"^\s*use\s+([^;]+);", content, re.M)
+        elif ext == ".java":
+            for match in re.finditer(r"(?:public|protected|private|static|final|synchronized|abstract|native|\s)+[\w<>\[\]?., ]+\s+([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:throws\s+[\w, ]+)?\s*\{", content):
+                if match.group(1) not in {"if", "for", "while", "switch", "catch"}:
+                    result["functions"].append({"name": match.group(1), "line": content.count("\n", 0, match.start()) + 1, "end_line": content.count("\n", 0, match.start()) + 1, "args": 0})
+            for match in re.finditer(r"\b(?:class|interface|enum)\s+([A-Za-z_]\w*)", content):
+                result["classes"].append({"name": match.group(1), "line": content.count("\n", 0, match.start()) + 1})
+            result["imports"] = re.findall(r"^\s*import\s+([\w.]+);", content, re.M)
     return result
 
 def _resolve_import(source: str, module: str, known: set[str]) -> str | None:
@@ -229,7 +252,9 @@ async def github_files(owner: str, repo: str, branch: str | None = None, token: 
         if tree_resp.status_code >= 400:
             raise HTTPException(tree_resp.status_code, "Could not read repository tree")
         tree = tree_resp.json().get("tree", [])
-        candidates = [x for x in tree if x.get("type") == "blob" and PurePosixPath(x["path"]).suffix.lower() in {".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".java", ".rs", ".md"} and not any(part in {".git", "node_modules", "vendor", "dist", "build", ".next"} for part in x["path"].split("/"))]
+        manifests = {"requirements.txt", "requirements-dev.txt", "requirements.lock", "package.json", "package-lock.json", "poetry.lock", "uv.lock", "cargo.lock", "go.sum"}
+        candidates = [x for x in tree if x.get("type") == "blob" and (PurePosixPath(x["path"]).suffix.lower() in {".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".java", ".rs", ".md"} or PurePosixPath(x["path"]).name.lower() in manifests) and not any(part in {".git", "node_modules", "vendor", "dist", "build", ".next"} for part in x["path"].split("/"))]
+        candidates.sort(key=lambda x: 0 if PurePosixPath(x["path"]).name.lower() in manifests else 1)
         candidates = candidates[:MAX_REPO_FILES]
         files: dict[str, str] = {}
         sem = __import__("asyncio").Semaphore(12)
