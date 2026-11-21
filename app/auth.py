@@ -79,6 +79,9 @@ def init_auth_db() -> None:
         );
         CREATE INDEX IF NOT EXISTS security_scans_repo_idx ON security_scans(repo_id, created_at);
         """)
+        now = int(time.time())
+        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
+        conn.execute("DELETE FROM users WHERE github_id NOT IN (SELECT DISTINCT github_id FROM sessions)")
 
 def _fernet() -> Fernet:
     if not SESSION_SECRET or len(SESSION_SECRET) < 32:
