@@ -106,6 +106,8 @@ def create_session(user: dict[str, Any], access_token: str) -> tuple[str, str]:
     csrf_hash = hashlib.sha256(csrf.encode()).hexdigest()
     role = role_for(user["login"])
     with _db() as conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
+        conn.execute("DELETE FROM users WHERE github_id NOT IN (SELECT DISTINCT github_id FROM sessions)")
         conn.execute(
             """INSERT INTO users(github_id,login,avatar_url,role,token_ciphertext,created_at,updated_at)
             VALUES(?,?,?,?,?,?,?) ON CONFLICT(github_id) DO UPDATE SET
@@ -123,17 +125,24 @@ def get_session(sid: str) -> dict[str, Any] | None:
     session_hash = hashlib.sha256(sid.encode()).hexdigest()
     now = int(time.time())
     with _db() as conn:
-        row = conn.execute("""SELECT u.github_id,u.login,u.avatar_url,u.role,u.token_ciphertext,s.csrf_hash,s.expires_at
+        row = conn.execute("""SELECT u.github_id,u.login,u.avatar_url,u.token_ciphertext,s.csrf_hash,s.expires_at
             FROM sessions s JOIN users u ON u.github_id=s.github_id
-            WHERE s.session_hash=? AND s.expires_at>?""", (session_hash, now)).fetchone()
+            WHERE s.session_hash=?""", (session_hash,)).fetchone()
     if not row:
         return None
-    return {"id": row["github_id"], "login": row["login"], "avatar_url": row["avatar_url"], "role": row["role"], "access_token": decrypt_token(row["token_ciphertext"]), "csrf_hash": row["csrf_hash"], "expires_at": row["expires_at"]}
+    if row["expires_at"] <= now:
+        delete_session(sid)
+        return None
+    return {"id": row["github_id"], "login": row["login"], "avatar_url": row["avatar_url"], "role": role_for(row["login"]), "access_token": decrypt_token(row["token_ciphertext"]), "csrf_hash": row["csrf_hash"], "expires_at": row["expires_at"]}
 
 def delete_session(sid: str) -> None:
     if sid:
+        session_hash = hashlib.sha256(sid.encode()).hexdigest()
         with _db() as conn:
-            conn.execute("DELETE FROM sessions WHERE session_hash=?", (hashlib.sha256(sid.encode()).hexdigest(),))
+            row = conn.execute("SELECT github_id FROM sessions WHERE session_hash=?", (session_hash,)).fetchone()
+            conn.execute("DELETE FROM sessions WHERE session_hash=?", (session_hash,))
+            if row:
+                conn.execute("DELETE FROM users WHERE github_id=? AND NOT EXISTS (SELECT 1 FROM sessions WHERE github_id=?)", (row["github_id"], row["github_id"]))
 
 def valid_csrf(session: dict[str, Any], token: str) -> bool:
     return bool(token and hmac.compare_digest(session["csrf_hash"], hashlib.sha256(token.encode()).hexdigest()))
