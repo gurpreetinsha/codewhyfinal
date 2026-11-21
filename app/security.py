@@ -38,6 +38,9 @@ def scan_source(files: dict[str, str]) -> list[dict[str, Any]]:
     seen: set[tuple[str, int, str]] = set()
     for path, content in files.items():
         for line_no, line in enumerate(content.splitlines(), 1):
+            safe_line = line
+            for _, secret_pattern, _ in SECRET_PATTERNS:
+                safe_line = secret_pattern.sub(lambda m: _mask(m.group(0)), safe_line)
             for title, pattern, severity in SECRET_PATTERNS:
                 for match in pattern.finditer(line):
                     raw = match.group(0)
@@ -70,7 +73,7 @@ def scan_source(files: dict[str, str]) -> list[dict[str, Any]]:
                         "title": title,
                         "path": path,
                         "line": line_no,
-                        "evidence": line.strip()[:180],
+                        "evidence": safe_line.strip()[:180],
                         "recommendation": recommendation,
                         "confidence": "review",
                     })
