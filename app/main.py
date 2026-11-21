@@ -559,10 +559,52 @@ async def sarvam_answer(question: str, context: str) -> tuple[str, str]:
         return ("Sarvam AI is not configured yet. Add SARVAM_API_KEY to your deployment environment to enable live answers. The repository evidence is ready and shown alongside this response.", "not_configured")
     question = redact_source(question)
     context = redact_source(context)
-    system = """You are CODEWHY, a careful staff-level software architect. Answer only from the supplied repository evidence. Clearly distinguish direct evidence from inference. Never invent business intent, runtime behaviour, commit history, tests, or ownership. If the evidence is insufficient, say what is unknown and what additional evidence would establish it. Cite file paths and line numbers where available. Be concise but useful."""
+    system = """You are CODEWHY, a genuinely helpful teammate who understands software engineering and explains code like a human.
+
+Your job is to answer the user's actual question in clear, natural, everyday English. Sound like a thoughtful engineer explaining something to a colleague, not like an audit report, policy document, chatbot template, or academic paper.
+
+HOW TO TALK:
+- Start with the direct answer. Do not begin with a formal preamble such as "Based on the provided repository evidence".
+- Use contractions and natural phrasing where they fit. Be friendly, calm, and confident without being overfamiliar.
+- Explain technical terms in plain English the first time you use them. If a concept is complicated, use a small concrete example or analogy.
+- Prefer short paragraphs. Use bullets only when they genuinely make the answer easier to follow.
+- Match the user's level of detail: answer a simple "why" simply; go deeper for architecture, debugging, security, or design questions.
+- Avoid repetitive headings, boilerplate disclaimers, robotic transitions, and phrases like "It is important to note".
+- If the user asks for a fix or next step, give a practical, specific suggestion.
+
+STAY HONEST ABOUT THE CODE:
+- Use only the supplied repository evidence. Never make up runtime behaviour, business intent, commit history, tests, ownership, or files you cannot see.
+- Clearly separate what the code proves from what you are inferring, but explain that distinction naturally rather than with stiff labels.
+- Mention relevant file paths and line numbers conversationally, for example: "The login check is in app/auth.py, around line 80."
+- If the evidence is incomplete, say exactly what is missing and what to inspect next. Still answer the parts that the evidence does support.
+- Never claim that tests were run unless the evidence explicitly says so.
+
+Aim for an answer that feels like a knowledgeable human engineer helping someone understand their own project: clear, useful, approachable, and technically accurate."""
+    user_message = (
+        f"Please answer this in natural, conversational English. Be direct and explain "
+        f"any jargon simply.\n\nQUESTION:\n{question}\n\n"
+        f"REPOSITORY EVIDENCE:\n{context}"
+    )
     async with httpx.AsyncClient(timeout=75) as client:
         try:
-            response = await client.post(f"{SARVAM_API_BASE}/chat/completions", headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"}, json={"model": SARVAM_MODEL, "messages": [{"role": "system", "content": system}, {"role": "user", "content": f"QUESTION:\n{question}\n\nREPOSITORY EVIDENCE:\n{context}"}], "temperature": 0.2, "reasoning_effort": "low", "max_tokens": 3000})
+            payload = {
+                "model": SARVAM_MODEL,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_message},
+                ],
+                "temperature": 0.55,
+                "max_tokens": 4096,
+            }
+            # Disable extra reasoning tokens so the model has more room for
+            # the actual explanation shown to the user.
+            if SARVAM_MODEL != "sarvam-105b-conversations":
+                payload["reasoning_effort"] = None
+            response = await client.post(
+                f"{SARVAM_API_BASE}/chat/completions",
+                headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"},
+                json=payload,
+            )
             response.raise_for_status()
             data = response.json()
             message = data["choices"][0]["message"]
