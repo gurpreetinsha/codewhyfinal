@@ -729,7 +729,7 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
     if history_context:
         context += "\nGITHUB COMMIT HISTORY (historical clues, not proof of intent):\n" + json.dumps(history_context)
     security_context = []
-    security_terms = {"security", "vulnerability", "vulnerable", "secret", "attack", "injection", "token", "credential", "exploit"}
+    security_terms = {"security", "vulnerability", "vulnerabilities", "vulnerable", "secret", "secrets", "attack", "attacks", "injection", "injections", "token", "tokens", "credential", "credentials", "exploit", "exploits", "password", "passwords"}
     if security_terms.intersection(set(terms)):
         security_report_data = SECURITY_REPORTS.get(repo_id)
         if not security_report_data:
