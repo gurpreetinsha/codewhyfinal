@@ -6,19 +6,21 @@ import json
 import os
 import re
 import time
+import secrets
 from collections import Counter, defaultdict
 from pathlib import PurePosixPath
 from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.security import security_report, scan_source
+from app.auth import (AUTH_REQUIRED, CSRF_COOKIE, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI, SESSION_COOKIE, audit, audit_list, create_session, delete_session, get_session, init_auth_db, load_investigations, oauth_ready, save_investigation, valid_csrf)
 
 try:
     from neo4j import GraphDatabase
@@ -55,6 +57,11 @@ if NEO4J_URI and NEO4J_PASSWORD and GraphDatabase:
 # In-memory fallback keeps the product usable for a zero-credential demo.
 REPOS: dict[str, dict[str, Any]] = {}
 INVESTIGATIONS: dict[str, list[dict[str, Any]]] = defaultdict(list)
+REPO_OWNERS: dict[str, str] = {}
+OAUTH_STATES: dict[str, int] = {}
+init_auth_db()
+if AUTH_REQUIRED and not oauth_ready():
+    raise RuntimeError("AUTH_REQUIRED=true needs GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET, GITHUB_OAUTH_REDIRECT_URI, and SESSION_SECRET (32+ characters).")
 
 DEMO_FILES = {
     "README.md": "# Atlas Commerce\nA small commerce API demo.\n",
@@ -205,7 +212,7 @@ def impact_report(graph: dict[str, Any], path: str) -> dict[str, Any]:
                 queue.append(parent)
     return {"path": path, "direct_dependents": sorted(reverse.get(path, set())), "transitive_dependents": sorted(seen), "count": len(seen), "note": "Impact is inferred from statically detected import relationships; dynamic imports and runtime behaviour may not be represented."}
 
-async def github_files(owner: str, repo: str, branch: str | None = None) -> tuple[dict[str, str], dict[str, Any]]:
+async def github_files(owner: str, repo: str, branch: str | None = None, token: str | None = None) -> tuple[dict[str, str], dict[str, Any]]:
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
@@ -265,6 +272,89 @@ class ChangeSimulationRequest(BaseModel):
 class PullRequestReviewRequest(BaseModel):
     url: str = Field(min_length=15, max_length=500)
 
+@app.middleware("http")
+async def auth_and_tenant_middleware(request: Request, call_next):
+    path = request.url.path
+    sid = request.cookies.get(SESSION_COOKIE, "")
+    user = get_session(sid) if sid else None
+    request.state.user = user
+    public_paths = {"/api/health", "/api/auth/status", "/api/auth/github", "/api/auth/callback"}
+    if AUTH_REQUIRED and path.startswith("/api/") and path not in public_paths:
+        if not user:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "Sign in with GitHub to access this workspace."}, status_code=401)
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            csrf = request.headers.get("X-CSRF-Token", "")
+            if not valid_csrf(user, csrf):
+                from fastapi.responses import JSONResponse
+                return JSONResponse({"detail": "CSRF validation failed. Refresh and try again."}, status_code=403)
+        for repo_id, owner in REPO_OWNERS.items():
+            if path.startswith("/api/repos/" + repo_id + "/") and owner.lower() != user["login"].lower():
+                from fastapi.responses import JSONResponse
+                return JSONResponse({"detail": "Repository access denied."}, status_code=404)
+    response = await call_next(request)
+    return response
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    user = getattr(request.state, "user", None)
+    return {"auth_required": AUTH_REQUIRED, "oauth_configured": oauth_ready(), "authenticated": bool(user), "user": ({ "login": user["login"], "avatar_url": user["avatar_url"], "role": user["role"] } if user else None), "csrf_token": request.cookies.get(CSRF_COOKIE, "")}
+
+@app.get("/api/auth/github")
+async def github_oauth_start():
+    if not oauth_ready():
+        raise HTTPException(503, "GitHub OAuth is not configured. Set the OAuth environment variables first.")
+    state = secrets.token_urlsafe(32)
+    OAUTH_STATES[state] = int(time.time()) + 600
+    for old, expiry in list(OAUTH_STATES.items()):
+        if expiry < int(time.time()):
+            OAUTH_STATES.pop(old, None)
+    from urllib.parse import urlencode
+    params = urlencode({"client_id": OAUTH_CLIENT_ID, "redirect_uri": OAUTH_REDIRECT_URI, "scope": "read:user user:email repo", "state": state})
+    return RedirectResponse("https://github.com/login/oauth/authorize?" + params, status_code=302)
+
+@app.get("/api/auth/callback")
+async def github_oauth_callback(code: str, state: str):
+    expiry = OAUTH_STATES.pop(state, None)
+    if not expiry or expiry < int(time.time()):
+        raise HTTPException(400, "OAuth state expired or invalid. Please sign in again.")
+    async with httpx.AsyncClient(timeout=20) as client:
+        token_response = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, json={"client_id": OAUTH_CLIENT_ID, "client_secret": OAUTH_CLIENT_SECRET, "code": code, "redirect_uri": OAUTH_REDIRECT_URI})
+        if token_response.status_code >= 400:
+            raise HTTPException(502, "GitHub token exchange failed.")
+        access_token = token_response.json().get("access_token")
+        if not access_token:
+            raise HTTPException(401, "GitHub did not issue an access token.")
+        profile_response = await client.get("https://api.github.com/user", headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"})
+        if profile_response.status_code >= 400:
+            raise HTTPException(502, "Could not retrieve the GitHub profile.")
+        profile = profile_response.json()
+    sid, csrf = create_session(profile, access_token)
+    user = {"id": profile["id"], "login": profile["login"]}
+    audit(user, "auth.login", "", "GitHub OAuth")
+    response = RedirectResponse("/", status_code=302)
+    secure = OAUTH_REDIRECT_URI.startswith("https://")
+    response.set_cookie(SESSION_COOKIE, sid, httponly=True, secure=secure, samesite="lax", max_age=43200, path="/")
+    response.set_cookie(CSRF_COOKIE, csrf, httponly=False, secure=secure, samesite="lax", max_age=43200, path="/")
+    return response
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request):
+    user = getattr(request.state, "user", None)
+    delete_session(request.cookies.get(SESSION_COOKIE, ""))
+    audit(user, "auth.logout")
+    response = RedirectResponse("/", status_code=303)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    response.delete_cookie(CSRF_COOKIE, path="/")
+    return response
+
+@app.get("/api/admin/audit")
+async def get_audit(request: Request, limit: int = 100):
+    user = getattr(request.state, "user", None)
+    if not user or user["role"] != "admin":
+        raise HTTPException(403, "Administrator role required.")
+    return {"events": audit_list(limit)}
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "sarvam_configured": bool(SARVAM_API_KEY), "neo4j_connected": bool(driver), "github_token_configured": bool(GITHUB_TOKEN)}
@@ -276,12 +366,12 @@ async def demo():
     return {"repository": graph_view(graph), "debt": debt_report(graph), "id": graph["id"]}
 
 @app.post("/api/repos/scan")
-async def scan(req: ScanRequest):
+async def scan(req: ScanRequest, request: Request):
     match = re.match(r"^(?:https?://github\.com/)?([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$", req.url.strip())
     if not match:
         raise HTTPException(400, "Enter a GitHub repository URL like https://github.com/owner/repo")
     owner, repo = match.groups()
-    files, meta = await github_files(owner, repo, req.branch)
+    user = getattr(request.state, "user", None)\n    files, meta = await github_files(owner, repo, req.branch, user.get("access_token") if user else None)
     graph = build_graph(rid(owner, repo), files, meta)
     REPOS[graph["id"]] = graph
     try:
@@ -355,7 +445,7 @@ async def ask(repo_id: str, req: AskRequest):
     return {"answer": answer, "provider": provider, "evidence": [{"path": e["path"], "lines": e["lines"], "relevance": e["relevance"]} for e in evidence], "disclaimer": "Answers are grounded in the retrieved source excerpts. Static analysis can miss dynamic behaviour and external context."}
 
 @app.get("/api/repos/{repo_id:path}/history")
-async def get_history(repo_id: str, path: str):
+async def get_history(repo_id: str, path: str, request: Request):
     graph = REPOS.get(repo_id)
     if not graph or path not in graph["files"]:
         raise HTTPException(404, "File not found")
@@ -379,7 +469,7 @@ async def get_history(repo_id: str, path: str):
         return {"commits": commits, "note": "Commit messages are historical evidence, not guaranteed explanations of original intent."}
 
 @app.post("/api/repos/{repo_id:path}/security/scan")
-async def run_security_scan(repo_id: str):
+async def run_security_scan(repo_id: str, request: Request):
     graph = REPOS.get(repo_id)
     if not graph:
         raise HTTPException(404, "Repository not found. Scan it first.")
@@ -389,7 +479,7 @@ async def run_security_scan(repo_id: str):
     return report
 
 @app.post("/api/repos/{repo_id:path}/investigate")
-async def autonomous_investigate(repo_id: str, req: InvestigationRequest):
+async def autonomous_investigate(repo_id: str, req: InvestigationRequest, request: Request):
     graph = REPOS.get(repo_id)
     if not graph:
         raise HTTPException(404, "Repository not found. Scan it first.")
@@ -429,7 +519,7 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest):
         "note": "This is a traceability check, not proof that every natural-language claim is true. Review the cited source before relying on the conclusion."
     }
     record = {"id": hashlib.sha256(f"{repo_id}:{time.time_ns()}:{req.question}".encode()).hexdigest()[:16], "question": req.question, "answer": answer, "provider": provider, "evidence": evidence, "steps": steps, "verification": verification, "created_at": int(time.time())}
-    INVESTIGATIONS[repo_id].insert(0, record)
+    user = getattr(request.state, "user", None)\n    save_investigation(repo_id, user.get("id") if user else None, record)\n    audit(user, "investigation.run", repo_id, req.question[:160])\n    INVESTIGATIONS[repo_id].insert(0, record)
     INVESTIGATIONS[repo_id] = INVESTIGATIONS[repo_id][:100]
     return record
 
@@ -437,7 +527,7 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest):
 async def investigation_history(repo_id: str):
     if repo_id not in REPOS:
         raise HTTPException(404, "Repository not found")
-    return {"items": INVESTIGATIONS.get(repo_id, [])}
+    return {"items": load_investigations(repo_id)}
 
 @app.get("/api/repos/{repo_id:path}/reports")
 async def repository_report(repo_id: str):
@@ -449,12 +539,12 @@ async def repository_report(repo_id: str):
         "repository": graph["metadata"],
         "statistics": graph["stats"],
         "technical_debt": debt_report(graph),
-        "investigations": INVESTIGATIONS.get(repo_id, [])[:20],
+        "investigations": load_investigations(repo_id, 20),
         "limitations": ["Static analysis cannot establish runtime exploitability.", "Dependency checks cover supported exact-version manifests and the OSV database.", "Dynamic imports and external runtime configuration may be missed."]
     }
 
 @app.post("/api/repos/{repo_id:path}/change-simulate")
-async def simulate_change(repo_id: str, req: ChangeSimulationRequest):
+async def simulate_change(repo_id: str, req: ChangeSimulationRequest, request: Request):
     graph = REPOS.get(repo_id)
     if not graph:
         raise HTTPException(404, "Repository not found")
@@ -465,10 +555,10 @@ async def simulate_change(repo_id: str, req: ChangeSimulationRequest):
     context += "\nCURRENT REPOSITORY IMPACT:\n" + json.dumps(impacted)
     context += "\nSTATIC SECURITY PATTERN FINDINGS IN DIFF:\n" + json.dumps(proposed_findings[:30])
     answer, provider = await sarvam_answer("Review this proposed change. Explain behaviour changes, compatibility risks, affected modules, security concerns, and tests to run. Clearly label unknowns. " + req.description, context)
-    return {"description": req.description, "changed_paths": changed, "impact": impacted, "security_findings": proposed_findings, "answer": answer, "provider": provider, "disclaimer": "This is a static preflight review, not execution, formal verification, or a guarantee that the patch is safe."}
+    audit(getattr(request.state, "user", None), "change.simulate", repo_id, f"{len(changed)} changed paths")\n    return {"description": req.description, "changed_paths": changed, "impact": impacted, "security_findings": proposed_findings, "answer": answer, "provider": provider, "disclaimer": "This is a static preflight review, not execution, formal verification, or a guarantee that the patch is safe."}
 
 @app.post("/api/repos/{repo_id:path}/pull-request/review")
-async def review_pull_request(repo_id: str, req: PullRequestReviewRequest):
+async def review_pull_request(repo_id: str, req: PullRequestReviewRequest, request: Request):
     graph = REPOS.get(repo_id)
     if not graph:
         raise HTTPException(404, "Scan the base repository first.")
@@ -499,7 +589,7 @@ async def review_pull_request(repo_id: str, req: PullRequestReviewRequest):
     impacts = [impact_report(graph, item["path"]) for item in changed if item["path"] in graph["files"]]
     context = "PULL REQUEST FILES:\n" + json.dumps(changed) + "\nDIFF PATCHES:\n" + diff[:20000] + "\nDEPENDENCY IMPACT:\n" + json.dumps(impacts) + "\nSTATIC SECURITY PATTERNS:\n" + json.dumps(findings[:35])
     answer, provider = await sarvam_answer("Act as a cautious senior security-minded code reviewer. Review this pull request for correctness, regressions, security, dependency and test risks. Prioritise actionable findings and cite changed file paths. Do not claim tests ran.", context)
-    return {"pull_request": req.url, "files": changed, "impact": impacts, "security_findings": findings, "review": answer, "provider": provider, "limitations": ["GitHub omits patch text for some large or binary files.", "Only the returned PR file patches are analysed.", "No tests are executed and no merge decision is made automatically."]}
+    audit(getattr(request.state, "user", None), "pull_request.review", repo_id, req.url)\n    return {"pull_request": req.url, "files": changed, "impact": impacts, "security_findings": findings, "review": answer, "provider": provider, "limitations": ["GitHub omits patch text for some large or binary files.", "Only the returned PR file patches are analysed.", "No tests are executed and no merge decision is made automatically."]}
 
 @app.get("/api/repos/{repo_id:path}/file")
 async def get_file(repo_id: str, path: str):
