@@ -26,5 +26,18 @@ jobs:
           node --check /tmp/codewhy.js
       - name: Build deployment image
         run: docker build -t codewhy:ci .
-      - name: Import FastAPI application
-        run: python -c "from app.main import app; print(app.title)"
+      - name: Verify Vercel FastAPI entrypoint and routes
+        run: |
+          python - <<'PY'
+          from fastapi.testclient import TestClient
+          from app.index import app
+
+          client = TestClient(app)
+          health = client.get("/api/health")
+          assert health.status_code == 200, health.text
+          assert health.json()["status"] == "ok", health.text
+          homepage = client.get("/")
+          assert homepage.status_code == 200, homepage.text
+          assert "CODEWHY" in homepage.text
+          print("Vercel entrypoint, health route, and homepage passed")
+          PY
