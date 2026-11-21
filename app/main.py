@@ -320,15 +320,15 @@ async def auth_and_tenant_middleware(request: Request, call_next):
     user = get_session(sid) if sid else None
     request.state.user = user
     public_paths = {"/api/health", "/api/auth/status", "/api/auth/github", "/api/auth/callback"}
-    if AUTH_REQUIRED and path.startswith("/api/") and path not in public_paths:
-        if not user:
+    if AUTH_REQUIRED and path.startswith("/api/") and path not in public_paths and not user:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "Sign in with GitHub to access this workspace."}, status_code=401)
+    if user and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        csrf = request.headers.get("X-CSRF-Token", "")
+        if not valid_csrf(user, csrf):
             from fastapi.responses import JSONResponse
-            return JSONResponse({"detail": "Sign in with GitHub to access this workspace."}, status_code=401)
-        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
-            csrf = request.headers.get("X-CSRF-Token", "")
-            if not valid_csrf(user, csrf):
-                from fastapi.responses import JSONResponse
-                return JSONResponse({"detail": "CSRF validation failed. Refresh and try again."}, status_code=403)
+            return JSONResponse({"detail": "CSRF validation failed. Refresh and try again."}, status_code=403)
+    if user:
         for repo_id, owner in REPO_OWNERS.items():
             if path.startswith("/api/repos/" + repo_id + "/") and owner.lower() != user["login"].lower():
                 from fastapi.responses import JSONResponse
