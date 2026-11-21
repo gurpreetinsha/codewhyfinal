@@ -359,7 +359,9 @@ async def auth_and_tenant_middleware(request: Request, call_next):
         RATE_BUCKETS[key].append(now)
     sid = request.cookies.get(SESSION_COOKIE, "")
     user = get_session(sid) if sid else None
+    anon_id = request.cookies.get("codewhy_anon", "") or secrets.token_urlsafe(18)
     request.state.user = user
+    request.state.anonymous_id = anon_id
     public_paths = {"/api/health", "/api/auth/status", "/api/auth/github", "/api/auth/callback"}
     if AUTH_REQUIRED and path.startswith("/api/") and path not in public_paths and not user:
         from fastapi.responses import JSONResponse
@@ -371,14 +373,22 @@ async def auth_and_tenant_middleware(request: Request, call_next):
             return JSONResponse({"detail": "CSRF validation failed. Refresh and try again."}, status_code=403)
     for repo_id, owner in REPO_OWNERS.items():
         if path.startswith("/api/repos/" + repo_id + "/"):
-            if owner != "anonymous" and not user:
-                from fastapi.responses import JSONResponse
-                return JSONResponse({"detail": "Sign in to access this repository workspace."}, status_code=401)
-            if user and owner != "anonymous" and owner.lower() != user["login"].lower():
-                from fastapi.responses import JSONResponse
-                return JSONResponse({"detail": "Repository access denied."}, status_code=404)
+            if owner.startswith("anon:"):
+                if user or owner != "anon:" + anon_id:
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse({"detail": "Repository access denied."}, status_code=404)
+            elif owner != "anonymous":
+                if not user:
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse({"detail": "Sign in to access this repository workspace."}, status_code=401)
+                if owner.lower() != user["login"].lower():
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse({"detail": "Repository access denied."}, status_code=404)
     response = await call_next(request)
+    if not user and not request.cookies.get("codewhy_anon"):
+        response.set_cookie("codewhy_anon", anon_id, httponly=True, secure=request.url.scheme == "https", samesite="lax", max_age=60 * 60 * 24 * 30, path="/")
     return response
+
 
 @app.get("/api/auth/status")
 async def auth_status(request: Request):
@@ -448,10 +458,10 @@ async def health():
 @app.get("/api/demo")
 async def demo(request: Request):
     user = getattr(request.state, "user", None)
-    demo_id = f"{user['login']}::demo/atlas-commerce" if user else "demo/atlas-commerce"
+    demo_id = f"{user['login']}::demo/atlas-commerce" if user else f"anon:{request.state.anonymous_id}::demo/atlas-commerce"
     graph = build_graph(demo_id, DEMO_FILES, {"full_name": "atlas-commerce/demo", "description": "A sample commerce backend with orders, payments, and a legacy pricing module.", "default_branch": "main", "html_url": "https://github.com", "demo": True})
     REPOS[graph["id"]] = graph
-    REPO_OWNERS[graph["id"]] = user["login"] if user else "anonymous"
+    REPO_OWNERS[graph["id"]] = user["login"] if user else "anon:" + request.state.anonymous_id
     return {"repository": graph_view(graph), "debt": debt_report(graph), "id": graph["id"]}
 
 @app.post("/api/repos/scan")
@@ -462,7 +472,7 @@ async def scan(req: ScanRequest, request: Request):
     owner, repo = match.groups()
     user = getattr(request.state, "user", None)
     files, meta = await github_files(owner, repo, req.branch, user.get("access_token") if user else None)
-    repo_key = f"{user['login']}::{owner}/{repo}" if user else rid(owner, repo)
+    repo_key = f"{user['login']}::{owner}/{repo}" if user else f"anon:{request.state.anonymous_id}::{owner}/{repo}"
     graph = build_graph(repo_key, files, meta)
     REPOS[graph["id"]] = graph
     REPO_OWNERS[graph["id"]] = user["login"] if user else "anonymous"
@@ -476,7 +486,7 @@ async def scan(req: ScanRequest, request: Request):
 @app.get("/api/repos")
 async def repos(request: Request):
     user = getattr(request.state, "user", None)
-    visible = [g for g in REPOS.values() if REPO_OWNERS.get(g["id"], "anonymous") == "anonymous" or (user and REPO_OWNERS.get(g["id"]) == user["login"])]
+    visible = [g for g in REPOS.values() if REPO_OWNERS.get(g["id"]) == ("anon:" + request.state.anonymous_id) or (user and REPO_OWNERS.get(g["id"]) == user["login"])]
     return [{"id": g["id"], "metadata": g["metadata"], "stats": g["stats"]} for g in visible]
 
 @app.get("/api/repos/{repo_id:path}/graph")
