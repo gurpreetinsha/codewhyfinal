@@ -1,4 +1,4 @@
-from app.main import attack_path_report, build_graph, impact_report
+from fastapi.testclient import TestClient\n\nfrom app.main import app, attack_path_report, build_graph, impact_report
 
 
 def test_graph_nodes_are_namespaced_and_impact_is_repo_local():
@@ -26,3 +26,18 @@ def test_attack_path_is_labelled_as_a_candidate_not_proof():
     assert len(candidates) == 1
     assert candidates[0]["path"] == ["api.py", "service.py"]
     assert "does not prove data flow" in candidates[0]["evidence"]
+
+def test_demo_routes_and_security_scan_work_end_to_end():
+    client = TestClient(app)
+    demo = client.get("/api/demo")
+    assert demo.status_code == 200
+    repo_id = demo.json()["id"]
+    graph = client.get("/api/repos/" + repo_id + "/graph")
+    assert graph.status_code == 200
+    assert graph.json()["stats"]["files"] > 0
+    impact = client.post("/api/repos/" + repo_id + "/impact", json={"path": "src/payments/gateway.py"})
+    assert impact.status_code == 200
+    assert "src/orders/service.py" in impact.json()["direct_dependents"]
+    security = client.post("/api/repos/" + repo_id + "/security/scan")
+    assert security.status_code == 200
+    assert "attack_paths" in security.json()
