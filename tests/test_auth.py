@@ -36,3 +36,17 @@ def test_role_mapping_uses_server_side_allowlists(monkeypatch):
     assert auth.role_for("OWNER") == "admin"
     assert auth.role_for("reviewer") == "reviewer"
     assert auth.role_for("someone-else") == "developer"
+
+def test_security_scan_timeline_tracks_new_unchanged_and_resolved_findings(tmp_path, monkeypatch):
+    database = tmp_path / "security-history.sqlite3"
+    monkeypatch.setattr(auth, "DB_PATH", str(database))
+    auth.init_auth_db()
+    finding = {"fingerprint": "stable-fingerprint", "path": "src/auth.py", "title": "Hard-coded credential", "severity": "critical"}
+    first = auth.save_security_scan("alice::org/repo", 42, {"scanned_at": 100, "summary": {"total": 1}, "findings": [finding]})
+    second = auth.save_security_scan("alice::org/repo", 42, {"scanned_at": 200, "summary": {"total": 1}, "findings": [finding]})
+    third = auth.save_security_scan("alice::org/repo", 42, {"scanned_at": 300, "summary": {"total": 0}, "findings": []})
+    assert first["new_count"] == 1
+    assert second["unchanged_count"] == 1 and second["new_count"] == 0
+    assert third["resolved_count"] == 1
+    history = auth.load_security_scans("alice::org/repo")
+    assert [item["created_at"] for item in history] == [300, 200, 100]
