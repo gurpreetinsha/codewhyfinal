@@ -50,7 +50,6 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | `NEO4J_PASSWORD` | For persistent graph | Database password |
 | `NEO4J_DATABASE` | No | Defaults to `neo4j` |
 | `GITHUB_TOKEN` | Private repositories | Fine-grained token with read-only Contents and Metadata access |
-| `APP_SECRET` | Production | Long random secret used for session signing |
 | `CORS_ORIGINS` | No | Comma-separated allowed origins; defaults to same-origin |
 | `MAX_REPO_FILES` | No | Maximum files per scan; defaults to 350 |
 
@@ -70,7 +69,6 @@ Deploy with Docker on any container host (Render, Railway, Fly.io, Azure Contain
 
 For production:
 - Use a managed Neo4j Aura instance and a persistent secret manager.
-- Set a strong `APP_SECRET`.
 - Use a private GitHub App or fine-grained read-only token for private repositories.
 - Put the app behind HTTPS.
 - Restrict CORS to your frontend origin.
