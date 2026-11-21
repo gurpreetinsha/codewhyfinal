@@ -711,7 +711,7 @@ async def github_history_context(graph: dict[str, Any], paths: set[str], token: 
     return history
 
 
-@app.get("/api/repos/{repo_id:path}/security/history")
+@app.get("/api/repos/{repo_id:path}/security-history")
 async def security_history(repo_id: str):
     if repo_id not in REPOS:
         raise HTTPException(404, "Scan this repository first.")
