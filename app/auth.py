@@ -77,7 +77,7 @@ def _fernet() -> Fernet:
     return Fernet(key)
 
 def oauth_ready() -> bool:
-    return bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET and OAUTH_REDIRECT_URI and SESSION_SECRET)
+    return bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET and OAUTH_REDIRECT_URI and len(SESSION_SECRET) >= 32 and not SESSION_SECRET.lower().startswith("replace"))
 
 def encrypt_token(token: str) -> str:
     return _fernet().encrypt(token.encode()).decode() if token else ""
