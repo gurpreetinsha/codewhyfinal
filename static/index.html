@@ -123,8 +123,8 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function setLoading(el,on){el.classList.toggle('loading',on)}
 async function loadDemo(){try{const d=await api('/api/demo');render(d);$('mode-pill').textContent='DEMO WORKSPACE';toast('Demo codebase loaded')}catch(e){toast(e.message)}}
 async function loadGitHubRepos(){
-  $('github-repos-card').dataset.connected='true';
   const card=$('github-repos-card');if(!card||!state.authenticated)return;
+  card.dataset.connected='true';
   card.style.display='block';$('github-repo-count').textContent='LOADING';
   $('github-repo-list').innerHTML='<div class="empty">Fetching repositories from GitHub…</div>';
   try{
@@ -141,7 +141,7 @@ async function loadGitHubRepos(){
 }
 async function scanRepository(fullName,button){
   const prior=button.textContent;button.disabled=true;button.textContent='Scanning…';
-  try{const result=await api('/api/repos/scan',{method:'POST',body:JSON.stringify({url:fullName})});render(result);$('mode-pill').textContent='CONNECTED · '+fullName.toUpperCase();$('repo-url').value='https://github.com/'+fullName;toast('Repository analysed successfully');window.scrollTo({top:0,behavior:'smooth'});}
+  try{const result=await api('/api/repos/scan',{method:'POST',body:JSON.stringify({url:fullName})});render(result);if(document.querySelector('.nav button.active')?.dataset.tab==='overview')$('github-repos-card').style.display='';$('mode-pill').textContent='CONNECTED · '+fullName.toUpperCase();$('repo-url').value='https://github.com/'+fullName;toast('Repository analysed successfully');window.scrollTo({top:0,behavior:'smooth'});}
   catch(error){toast(error.message)}
   finally{button.disabled=false;button.textContent=prior}
 }
