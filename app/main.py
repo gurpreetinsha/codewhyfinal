@@ -441,9 +441,12 @@ async def health():
     return {"status": "ok", "sarvam_configured": bool(SARVAM_API_KEY), "neo4j_connected": bool(driver), "auth_required": AUTH_REQUIRED, "oauth_configured": oauth_ready()}
 
 @app.get("/api/demo")
-async def demo():
-    graph = build_graph("demo/atlas-commerce", DEMO_FILES, {"full_name": "atlas-commerce/demo", "description": "A sample commerce backend with orders, payments, and a legacy pricing module.", "default_branch": "main", "html_url": "https://github.com", "demo": True})
+async def demo(request: Request):
+    user = getattr(request.state, "user", None)
+    demo_id = f"{user['login']}::demo/atlas-commerce" if user else "demo/atlas-commerce"
+    graph = build_graph(demo_id, DEMO_FILES, {"full_name": "atlas-commerce/demo", "description": "A sample commerce backend with orders, payments, and a legacy pricing module.", "default_branch": "main", "html_url": "https://github.com", "demo": True})
     REPOS[graph["id"]] = graph
+    REPO_OWNERS[graph["id"]] = user["login"] if user else "anonymous"
     return {"repository": graph_view(graph), "debt": debt_report(graph), "id": graph["id"]}
 
 @app.post("/api/repos/scan")
