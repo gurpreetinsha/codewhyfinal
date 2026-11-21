@@ -20,7 +20,6 @@ CODEWHY is an AI engineering-intelligence and repository-security workspace. It 
 - Signed-in GitHub repository browser for owned, collaborator and organisation repositories, including private repositories permitted by the user's OAuth grant.
 - Architecture graph for files, functions, classes, imports and approximate calls.
 - Per-file GitHub commit history ("WHY HISTORY"). Commit messages are historical clues, not proof of original intent.
-- Repository-wide commit history checker with searchable recent commits, author/date and per-commit file/addition/deletion summaries.
 - Dependency impact analysis using reverse import relationships.
 - Technical-debt heuristics for large files, long functions, TODO/FIXME/HACK markers and convention-based test detection.
 
@@ -154,7 +153,6 @@ If Neo4j is not configured, the demo uses an in-memory graph. The SQLite databas
 - GET /api/auth/status, GET /api/auth/github, GET /api/auth/callback, POST /api/auth/logout — authentication; GET /api/github/repos — signed-in user's accessible repositories.
 - POST /api/repos/scan — scan a GitHub repository.
 - GET /api/repos/{repo_id}/graph, GET /api/repos/{repo_id}/file, GET /api/repos/{repo_id}/history — codebase exploration.
-- GET /api/repos/{repo_id}/commits — recent repository commit timeline and change statistics.
 - POST /api/repos/{repo_id}/impact — dependency impact.
 - POST /api/repos/{repo_id}/ask, POST /api/repos/{repo_id}/investigate — AI Q&A and autonomous investigation.
 - POST /api/repos/{repo_id}/security/scan and GET /api/repos/{repo_id}/security-history — Sentinel scan and finding timeline.
