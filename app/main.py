@@ -730,7 +730,10 @@ async def simulate_change(repo_id: str, req: ChangeSimulationRequest, request: R
         raise HTTPException(404, "Repository not found")
     changed = sorted(set(re.findall(r"^\+\+\+ b/(.+)$", req.diff, re.M)))
     impacted = [impact_report(graph, path) for path in changed if path in graph["files"]]
-    proposed_findings = scan_source({"proposed-change.diff": req.diff})
+    diff_files = {}
+    for match in re.finditer(r"(?ms)^diff --git a/(.+?) b/(.+?)\n(.*?)(?=^diff --git|\Z)", req.diff):
+        diff_files[match.group(2)] = match.group(3)
+    proposed_findings = scan_source(diff_files or {"proposed-change.diff": req.diff})
     context = "CHANGE DESCRIPTION:\n" + req.description + "\nPROPOSED DIFF:\n" + req.diff[:18000]
     context += "\nCURRENT REPOSITORY IMPACT:\n" + json.dumps(impacted)
     context += "\nSTATIC SECURITY PATTERN FINDINGS IN DIFF:\n" + json.dumps(proposed_findings[:30])
@@ -771,7 +774,8 @@ async def review_pull_request(repo_id: str, req: PullRequestReviewRequest, reque
         if patch:
             diff_parts.append(f"FILE: {item.get('filename')} | STATUS: {item.get('status')}\n{patch[:6000]}")
     diff = "\n\n".join(diff_parts)
-    findings = scan_source({"pull-request.patch": diff})
+    patch_files = {item.get("filename", "unknown.patch"): item.get("patch", "") for item in pr_files if item.get("patch")}
+    findings = scan_source(patch_files or {"pull-request.patch": diff})
     impacts = [impact_report(graph, item["path"]) for item in changed if item["path"] in graph["files"]]
     context = "PULL REQUEST FILES:\n" + json.dumps(changed) + "\nDIFF PATCHES:\n" + diff[:20000] + "\nDEPENDENCY IMPACT:\n" + json.dumps(impacts) + "\nSTATIC SECURITY PATTERNS:\n" + json.dumps(findings[:35])
     answer, provider = await sarvam_answer("Act as a cautious senior security-minded code reviewer. Review this pull request for correctness, regressions, security, dependency and test risks. Prioritise actionable findings and cite changed file paths. Do not claim tests ran.", context)
