@@ -156,6 +156,15 @@ pytest -q
 
 GitHub Actions runs compilation, unit tests and an application import check on pushes and pull requests.
 
+## Data handling and privacy
+
+- Repository contents are fetched from GitHub using the signed-in user's OAuth token. Unauthenticated mode can scan public repositories only.
+- Ask Why and Autonomous Investigator send selected source excerpts and graph context to Sarvam AI. Voice recordings are sent to Sarvam speech-to-text. Use these features only where your organisation permits that processing.
+- Dependency package names and exact versions are sent to the public OSV API for advisory lookup.
+- Neo4j stores repository identifiers, file paths, symbol names and relationship edges; it does not store full source file bodies.
+- Investigation records in SQLite include the question, answer, evidence excerpts and file references. OAuth tokens are encrypted at rest using a key derived from SESSION_SECRET. Protect the SQLite volume and Neo4j database as sensitive company data.
+- The current build has no self-service investigation deletion or configurable retention policy. Add both before handling regulated or highly sensitive repositories.
+
 ## Important limitations and production checklist
 
 CODEWHY is a hackathon-stage engineering assistant, not a certified security scanner or production enterprise security boundary.
