@@ -23,12 +23,18 @@ CODEWHY is an AI engineering-intelligence and repository-security workspace. It 
 - Dependency impact analysis using reverse import relationships.
 - Technical-debt heuristics for large files, long functions, TODO/FIXME/HACK markers and convention-based test detection.
 
-### CODEWHY Sentinel
-- Secret exposure patterns for GitHub tokens, AWS keys, Slack tokens, JWT-like values, private-key headers and hard-coded credential assignments. Secret values are masked in findings.
-- Static risky-pattern checks for dynamic execution, pickle deserialization, shell execution, disabled TLS verification, unsafe YAML loading, weak hash primitives, SQL interpolation and wildcard CORS.
-- Dependency inventory for pinned requirements, npm package manifests/lockfiles, Poetry/uv locks, Cargo locks and Go sums.
-- Known dependency advisories via the OSV query API. Only exact versions that the scanner can identify are queried.
-- Potential attack-path candidates connecting route/input-like files to risky sinks through import edges. These are graph heuristics, not data-flow or exploitability proofs.
+### CODEWHY Sentinel (Multilingual Graph Security Investigator)
+- **Voice-Enabled Multilingual Investigation:** Ask security questions via microphone using Sarvam AI Speech-to-Text (`saaras:v4` in codemix mode), or type questions in English or 10+ Indian languages (Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, Odia, Punjabi).
+- **Multilingual Query Understanding:** Converts natural or code-mixed inquiries into structured investigation targets while strictly preserving technical identifiers (`check_password_hash`, `jwt.encode`, `/api/v1/auth/login`, `db.session.execute`).
+- **Full Repository Knowledge Graph (Neo4j):** 12 node kinds (`Repository`, `File`, `Function`, `API`, `Dependency`, `Commit`, `PullRequest`, `Developer`, `Vulnerability`, `SecurityFinding`, `TechnicalDecision`, `Fix`) and 9 relationship types (`CONTAINS`, `DEFINES`, `DEPENDS_ON`, `MODIFIES`, `AFFECTS`, `INTRODUCES`, `FIXES`, `REVIEWED_IN`, `RELATED_TO`) with parameterized Cypher queries and in-memory fallback.
+- **Security-Sensitive Component Identification:** Automatically catalogs authentication handlers, API endpoints, database operations, file upload mechanisms, secret management, and external service connectors.
+- **Defensive Attack Path Reconstruction:** Traces multi-hop entrypoint-to-sink pathways with explicit confidence levels: `VERIFIED` (source-proven call/import chain), `POTENTIAL` (structural or import connection), and `AI_HYPOTHESIS` (inferred risk). Read-only and non-intrusive.
+- **Evidence-Backed Findings & Grounding:** Findings cite concrete file paths, line ranges, AST symbols, and commit metadata. Flags unverified assertions explicitly with *"Insufficient repository evidence to verify this finding."*
+- **Interactive Remediation Tracking:** Developers can inspect, review, and toggle lifecycle statuses (`open`, `under_review`, `fixed`, `verified`) persisted in SQLite with full audit records.
+- **Multilingual Spoken Explanations:** Sarvam Text-to-Speech (`bulbul:v4-flash`) provides on-demand spoken summaries with native audio playback controls.
+- **Secret exposure patterns:** GitHub tokens, AWS keys, Slack tokens, JWT-like values, private-key headers, and hard-coded credential assignments (with automatic masking).
+- **Static risky-pattern checks:** Dynamic execution, pickle deserialization, shell execution, disabled TLS verification, unsafe YAML loading, weak hash primitives, SQL interpolation, and wildcard CORS.
+- **Dependency inventory & OSV advisories:** Direct integration with OSV database for pinned requirements, npm manifests, Poetry/uv, Cargo, and Go sum lockfiles.
 
 ### AI investigation and change review
 - Ask your codebase using Sarvam Chat Completions.
@@ -156,6 +162,15 @@ If Neo4j is not configured, the demo uses an in-memory graph. The SQLite databas
 - POST /api/repos/{repo_id}/impact — dependency impact.
 - POST /api/repos/{repo_id}/ask, POST /api/repos/{repo_id}/investigate — AI Q&A and autonomous investigation.
 - POST /api/repos/{repo_id}/security/scan and GET /api/repos/{repo_id}/security-history — Sentinel scan and finding timeline.
+- GET /api/sentinel/languages — Supported languages and Sarvam voice mappings.
+- GET /api/sentinel/repos — Repositories accessible to the logged-in user for Sentinel.
+- POST /api/sentinel/understand-query — Multilingual security query parsing and technical identifier extraction.
+- POST /api/sentinel/investigate — Full graph-powered, evidence-backed security investigation.
+- GET /api/sentinel/history — Persisted Sentinel investigation logs.
+- GET /api/sentinel/investigation/{id} — Retrieve detailed investigation record and findings.
+- PATCH /api/sentinel/finding/{finding_id}/status — Update finding lifecycle status (open, under_review, fixed, verified).
+- POST /api/sentinel/speak — Generate Sarvam Bulbul TTS spoken response.
+- GET /api/sentinel/overview/{repo_id} — Graph topology and security component statistics.
 - POST /api/repos/{repo_id}/change-simulate — proposed diff review.
 - POST /api/repos/{repo_id}/pull-request/review — GitHub PR review.
 - GET /api/repos/{repo_id}/investigations, GET /api/repos/{repo_id}/reports — history and report data.
