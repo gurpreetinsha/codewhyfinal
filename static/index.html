@@ -1091,6 +1091,8 @@ function renderSentinelCodeDiff(){
 async function runSentinelCodeReview(){
   const repoId=$('sentinel-repo-select')?.value||state.id;
   const path=$('sentinel-code-file')?.value;
+  const repoOption=[...($('sentinel-repo-select')?.options||[])].find(o=>o.value===repoId);
+  if(repoOption?.textContent.toLowerCase().includes('demo'))return toast('Load a real GitHub repository to use AI Code Helper');
   if(!repoId)return toast('Scan a repository first');
   if(!path)return toast('Choose a source file');
   if(!state.authenticated)return toast('Sign in with GitHub before requesting an AI code replacement');
@@ -1121,6 +1123,7 @@ async function runSentinelCodeReview(){
 }
 async function commitSentinelCodeFix(){
   if(!sentinelCodeHelperResult)return;
+  if(!state.authenticated)return toast('Sign in with GitHub before committing');
   if(!$('sentinel-code-confirm').checked)return toast('Review the diff and confirm before committing');
   const content=$('sentinel-code-replacement').value;
   if(!content.trim())return toast('Replacement code cannot be empty');
