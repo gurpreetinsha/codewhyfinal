@@ -120,19 +120,28 @@ function renderGraph(g){
     components.push(component);
   }
   components.sort((a,b)=>b.length-a.length);
-  const pos=new Map(),top=62,componentGap=50,usableH=Math.max(h,components.length*210);
+  const pos=new Map(),top=62,componentGap=50;
   let y=top;
   components.forEach((component,ci)=>{
     const files=component.filter(id=>nodeById.get(id).type==='file'),symbols=component.filter(id=>nodeById.get(id).type!=='file');
-    const cols=Math.max(1,Math.ceil(Math.sqrt(files.length))),cellW=Math.max(190,(w-100)/cols);
-    const rows=Math.max(1,Math.ceil(files.length/cols));let index=0;
-    files.forEach(id=>{const col=index%cols,row=Math.floor(index/cols);pos.set(id,{x:55+col*cellW,y:y+row*170});index++});
-    symbols.forEach(id=>{const n=nodeById.get(id),p=pos.get(nodes.find(x=>x.path===n.path&&x.type==='file')?.id);
-      const base=p||{x:55,y:y};const group=(component.filter(other=>nodeById.get(other).path===n.path&&nodeById.get(other).type!=='file').indexOf(id));
-      const siblings=component.filter(other=>nodeById.get(other).path===n.path&&nodeById.get(other).type!=='file').length;
-      pos.set(id,{x:base.x+35+(group%3)*50,y:base.y+42+Math.floor(group/3)*34+(siblings>3?0:0)});
+    const fileGap=190,symbolGap=48,baseX=55;
+    let fileIndex=0;
+    files.forEach(id=>{
+      const col=fileIndex%Math.max(1,Math.floor((w-110)/fileGap));
+      const row=Math.floor(fileIndex/Math.max(1,Math.floor((w-110)/fileGap)));
+      pos.set(id,{x:baseX+col*fileGap,y:y+row*210});fileIndex++;
     });
-    y+=Math.max(190,rows*170)+componentGap;
+    const perPath=new Map();
+    symbols.forEach(id=>{
+      const n=nodeById.get(id),file=files.find(fid=>nodeById.get(fid).path===n.path);
+      const base=file?pos.get(file):{x:baseX,y:y};
+      const group=perPath.get(n.path)||0;perPath.set(n.path,group+1);
+      pos.set(id,{x:base.x+34+(group%2)*70,y:base.y+45+Math.floor(group/2)*symbolGap});
+    });
+    const cols=Math.max(1,Math.floor((w-110)/fileGap));
+    const rows=Math.max(1,Math.ceil(files.length/cols));
+    const maxSymbols=Math.max(0,...Array.from(perPath.values()));
+    y+=Math.max(190,rows*210+Math.ceil(maxSymbols/2)*symbolGap)+componentGap;
   });
   const svgH=Math.max(h,y+20);let lines='';
   edges.forEach(e=>{const a=pos.get(e.source),b=pos.get(e.target);if(!a||!b)return;
@@ -144,7 +153,8 @@ function renderGraph(g){
     const label=(n.label||'').slice(0,22);
     dots+=`<g data-path="${esc(n.path||'')}" style="cursor:pointer"><circle cx="${p.x}" cy="${p.y}" r="${n.type==='file'?9:6}" fill="${c}" stroke="#0e141b" stroke-width="2"><title>${esc(n.path||'')}: ${esc(n.label||'')}</title></circle><text x="${p.x+13}" y="${p.y+4}" fill="#b8c4cf" font-size="10" font-family="DM Mono">${esc(label)}</text></g>`;
   });
-  el.innerHTML=`<div style="overflow:auto;max-width:100%;max-height:650px"><svg width="${Math.max(w,Math.ceil(w))}" height="${svgH}" viewBox="0 0 ${w} ${svgH}" preserveAspectRatio="xMinYMin meet">${lines}${dots}<text x="18" y="25" fill="#687789" font-size="10" font-family="DM Mono">NEO4J PERSISTED TOPOLOGY · ${nodes.length} NODES · ${edges.length} RELATIONSHIPS</text></svg></div>`;
+  const svgW=Math.max(w,Math.ceil(w),...Array.from(pos.values()).map(p=>p.x+210));
+  el.innerHTML=`<div style="overflow:auto;max-width:100%;max-height:650px"><svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="xMinYMin meet">${lines}${dots}<text x="18" y="25" fill="#687789" font-size="10" font-family="DM Mono">PERSISTED GRAPH · ${nodes.length} NODES · ${edges.length} RELATIONSHIPS</text></svg></div>`;
   el.querySelectorAll('g[data-path]').forEach(group=>group.addEventListener('click',()=>openFile(group.dataset.path)));
 }
 function renderDebt(){if(!state.debt.length){$('debt-list').innerHTML='<div class="empty">No obvious debt signals. That is a good start.</div>';return}$('debt-list').innerHTML=state.debt.slice(0,18).map(x=>`<div class="debt-item"><div class="debt-top"><span class="sev ${esc(x.severity)}">${esc(x.severity)}</span><strong>${esc(x.title)}</strong></div><p>${esc(x.detail)}</p><div class="path">${esc(x.path)}</div></div>`).join('')}
