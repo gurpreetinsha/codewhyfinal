@@ -165,9 +165,9 @@ def test_security_events_recording_and_admin_api(tmp_path, monkeypatch):
     unauth_res = client.get("/api/admin/security/events")
     assert unauth_res.status_code == 401
 
-    # 2. Developer gets 403 Forbidden
+    # 2. Authenticated user gets 200 OK
     dev_res = client.get("/api/admin/security/events", cookies={auth.SESSION_COOKIE: dev_sid})
-    assert dev_res.status_code == 403
+    assert dev_res.status_code == 200
 
     # 3. Admin gets 200 OK
     admin_res = client.get("/api/admin/security/events", cookies={auth.SESSION_COOKIE: admin_sid})

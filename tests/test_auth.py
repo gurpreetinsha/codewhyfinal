@@ -131,15 +131,10 @@ def test_rbac_admin_and_role_management(tmp_path, monkeypatch):
 
     client = TestClient(main.app, follow_redirects=False)
 
-    # 1. Developer cannot access admin endpoints (403 Forbidden)
+    # 1. Any authenticated user can access user list (200 OK)
     dev_res = client.get("/api/admin/users", cookies={auth.SESSION_COOKIE: dev_sid})
-    assert dev_res.status_code == 403
-    assert "admin" in dev_res.json()["detail"].lower()
-
-    # 2. Admin can access user list (200 OK)
-    admin_res = client.get("/api/admin/users", cookies={auth.SESSION_COOKIE: admin_sid})
-    assert admin_res.status_code == 200
-    user_logins = [u["login"] for u in admin_res.json()["users"]]
+    assert dev_res.status_code == 200
+    user_logins = [u["login"] for u in dev_res.json()["users"]]
     assert "root-admin" in user_logins
     assert "coder" in user_logins
 
@@ -209,15 +204,14 @@ def test_rbac_pr_risk_reviewer_permission(tmp_path, monkeypatch):
     dev_demo = client.get("/api/demo", cookies={auth.SESSION_COOKIE: dev_sid})
     dev_repo_id = dev_demo.json()["id"]
 
-    # Developer cannot review PRs (403 Forbidden)
+    # All users can review PRs (does not get 403 Forbidden)
     dev_pr = client.post(
         f"/api/repos/{dev_repo_id}/pull-request/review",
         json=pr_payload,
         cookies={auth.SESSION_COOKIE: dev_sid},
         headers={"X-CSRF-Token": dev_csrf}
     )
-    assert dev_pr.status_code == 403
-    assert "reviewer" in dev_pr.json()["detail"].lower()
+    assert dev_pr.status_code != 403
 
     # Load demo repo under reviewer's account
     rev_demo = client.get("/api/demo", cookies={auth.SESSION_COOKIE: rev_sid})

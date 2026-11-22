@@ -59,12 +59,12 @@
 <div class="shell">
 <aside class="sidebar">
 <div class="brand"><div class="mark">C.</div>CODE<span>WHY</span></div>
-<div><div class="side-label">WORKSPACE</div><nav class="nav"><button class="active" data-tab="overview"><span class="ico">◈</span>Overview</button><button data-tab="sentinel" style="border-left:2px solid var(--lime)"><span class="ico" style="color:var(--lime)">🛡</span>CodeWhy Sentinel</button><button data-tab="graph"><span class="ico">⌘</span>Code graph</button><button data-tab="debt"><span class="ico">◉</span>Technical debt</button><button data-tab="ask"><span class="ico">✳</span>Ask CODEWHY</button><button data-tab="security"><span class="ico">⌑</span>Security center</button><button data-tab="investigate"><span class="ico">◎</span>Autonomous investigator</button><button data-tab="pr"><span class="ico">⇄</span>PR risk reviewer</button><button data-tab="change"><span class="ico">⌁</span>Change simulator</button><button data-tab="history"><span class="ico">◷</span>History & reports</button><button data-tab="trust" id="nav-trust-btn" style="border-left:2px solid var(--lime)"><span class="ico" style="color:var(--lime)">🏛</span>Trust & SOC 2</button><button data-tab="shield" id="nav-shield-btn" style="border-left:2px solid #ff4757"><span class="ico" style="color:#ff4757">🛡</span>Security Shield</button><button data-tab="users" id="nav-users-btn" style="display:none;border-left:2px solid var(--cyan)"><span class="ico" style="color:var(--cyan)">👥</span>User Management</button></nav></div>
+<div><div class="side-label">WORKSPACE</div><nav class="nav"><button class="active" data-tab="overview"><span class="ico">◈</span>Overview</button><button data-tab="sentinel" style="border-left:2px solid var(--lime)"><span class="ico" style="color:var(--lime)">🛡</span>CodeWhy Sentinel</button><button data-tab="graph"><span class="ico">⌘</span>Code graph</button><button data-tab="debt"><span class="ico">◉</span>Technical debt</button><button data-tab="ask"><span class="ico">✳</span>Ask CODEWHY</button><button data-tab="security"><span class="ico">⌑</span>Security center</button><button data-tab="investigate"><span class="ico">◎</span>Autonomous investigator</button><button data-tab="pr"><span class="ico">⇄</span>PR risk reviewer</button><button data-tab="change"><span class="ico">⌁</span>Change simulator</button><button data-tab="history"><span class="ico">◷</span>History & reports</button><button data-tab="trust" id="nav-trust-btn" style="border-left:2px solid var(--lime)"><span class="ico" style="color:var(--lime)">🏛</span>Trust & SOC 2</button><button data-tab="shield" id="nav-shield-btn" style="border-left:2px solid #ff4757"><span class="ico" style="color:#ff4757">🛡</span>Security Shield</button></nav></div>
 <div><div class="side-label">YOUR REPOSITORIES</div><nav class="nav"><button id="repo-nav"><span class="ico">⌁</span><span id="repo-name">Atlas Commerce</span></button></nav></div>
 <div class="side-bottom"><div class="status"><strong><span class="dot"></span>System operational</strong><div id="sys-status">Checking integrations…</div><div style="margin-top:8px">CODEWHY v1.0 · Hackathon build</div></div></div>
 </aside>
 <main class="main">
-<header class="top"><div class="crumb">WORKSPACE / <span style="color:#dce5f0">OVERVIEW</span></div><div class="topright"><span class="pill" id="mode-pill">DEMO WORKSPACE</span><span class="pill" id="role-pill" style="display:none;color:var(--lime);border-color:#354334;font-weight:700">DEVELOPER</span><button class="btn" id="my-repos-btn" style="display:inline-block;padding:7px 11px;font-size:11px">📁 My Repositories</button><button class="btn" id="auth-action" style="display:inline-block;padding:7px 11px;font-size:11px">Sign in</button><div class="avatar" id="avatar" style="cursor:pointer" title="Click to view profile menu">G</div></div></header>
+<header class="top"><div class="crumb">WORKSPACE / <span style="color:#dce5f0">OVERVIEW</span></div><div class="topright"><span class="pill" id="mode-pill">DEMO WORKSPACE</span><button class="btn" id="my-repos-btn" style="display:inline-block;padding:7px 11px;font-size:11px">📁 My Repositories</button><button class="btn" id="auth-action" style="display:inline-block;padding:7px 11px;font-size:11px">Sign in</button><div class="avatar" id="avatar" style="cursor:pointer" title="Click to view profile menu">G</div></div></header>
 <div id="auth-alert" style="display:none;padding:12px 18px;border-radius:10px;margin-bottom:20px;font-size:12px;display:flex;align-items:center;justify-content:space-between"></div>
 <section class="hero"><div><div class="eyebrow">Codebase intelligence, not guesswork</div><h1>Know your code.<br><span style="color:var(--lime)">Know the why.</span></h1><p>Map the moving parts, uncover hidden dependencies, and ask the questions your code never documented.</p></div><div class="actions"><button class="btn" id="demo-btn">↗ Load demo</button><button class="btn primary" onclick="document.getElementById('repo-url').focus()">＋ Connect repository</button></div></section>
 <section class="connect"><div class="spark">✳</div><div class="connect-copy"><strong>Bring a codebase into focus</strong><small>Connect a GitHub repository to map its architecture in seconds.</small></div><div class="connect-form"><input id="repo-url" placeholder="https://github.com/owner/repository"><button class="btn primary" id="scan-btn">Scan repo →</button></div></section>
@@ -190,16 +190,6 @@
         <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">WAF defense & attack simulator</small>
       </div>
       <span style="color:#ff4757;font-size:14px">→</span>
-    </button>
-    <button type="button" class="btn feature-nav-btn" data-tab="users" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid var(--cyan);border-radius:8px;text-align:left;cursor:pointer">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="color:var(--cyan);font-size:16px">👥</span>
-          <strong style="color:var(--text);font-size:13px">User Management</strong>
-        </div>
-        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Role assignments & RBAC</small>
-      </div>
-      <span style="color:var(--cyan);font-size:14px">→</span>
     </button>
   </div>
 </section>
@@ -502,9 +492,6 @@
 <section class="card feature-section" id="pr-section">
 <div class="card-head"><h2>PR risk reviewer</h2><small>GITHUB PULL REQUEST ANALYSIS</small></div>
 <div class="feature-body">
-  <div id="pr-role-warning" style="display:none;background:#241818;border:1px solid #5a2e2e;color:#ff8585;padding:14px 16px;border-radius:10px;margin-bottom:14px;font-size:12px;line-height:1.6">
-    🔒 <strong>Role Restricted:</strong> You are currently signed in with the <b>Developer</b> role. Pull Request reviews require <b>Reviewer</b> or <b>Administrator</b> permissions. Contact an administrator to update your role.
-  </div>
   <div id="pr-content-wrap">
     <p>Review changed files, dependency impact, suspicious patterns and testing gaps before merging. CODEWHY never merges automatically.</p>
     <div class="inline-field"><input id="pr-url" placeholder="https://github.com/owner/repo/pull/123"><button class="btn primary" id="pr-btn">Review PR →</button></div>
@@ -517,39 +504,8 @@
 <div class="feature-body"><p>Paste a unified Git diff and describe the proposed change. CODEWHY will inspect changed paths, existing dependencies and security patterns.</p><input id="change-description" placeholder="What are you changing and why?"><textarea id="change-diff" rows="7" placeholder="diff --git a/src/example.py b/src/example.py&#10;--- a/src/example.py&#10;+++ b/src/example.py&#10;@@ ..."></textarea><div class="feature-actions"><button class="btn primary" id="change-btn">Simulate change →</button><span class="muted-note">Static review only — no code is executed.</span></div><div id="change-result" class="feature-result"></div></div>
 </section>
 <section class="card feature-section" id="history-section">
-<div class="card-head"><h2>Investigation history & reports</h2><div class="feature-actions"><button class="btn" id="history-btn">Refresh history</button><button class="btn" id="audit-btn" style="display:none">Audit trail</button><button class="btn primary" id="report-btn">Export report ↓</button></div></div>
+<div class="card-head"><h2>Investigation history & reports</h2><div class="feature-actions"><button class="btn" id="history-btn">Refresh history</button><button class="btn" id="audit-btn" style="display:inline-block">Audit trail</button><button class="btn primary" id="report-btn">Export report ↓</button></div></div>
 <div class="feature-body"><div id="history-list"><div class="empty">Investigations will be saved here for future review.</div></div><div id="audit-list" class="feature-result"></div><div class="footnote">Investigation records and audit events are stored in SQLite. Source snapshots remain in application memory and must be rescanned after a restart.</div></div>
-</section>
-<section class="card feature-section" id="users-section">
-<div class="card-head">
-  <div><h2>Role-Based Access Control · User Management</h2><small style="color:var(--muted)">ASSIGN ROLES · MANAGE STATUS · ENFORCE SECURITY</small></div>
-  <div class="feature-actions" style="margin:0"><button class="btn" id="refresh-users-btn">Refresh Users</button></div>
-</div>
-<div class="feature-body">
-  <div style="background:#0d131b;border:1px solid #1f2b38;border-radius:10px;padding:14px;margin-bottom:16px;line-height:1.6;font-size:12px;color:var(--muted)">
-    <strong style="color:var(--text);display:block;margin-bottom:4px">Role Hierarchy & Privileges:</strong>
-    <span style="color:var(--lime)">● Admin</span>: Full system access, User Management, role assignments, audit activity.<br>
-    <span style="color:var(--cyan)">● Reviewer</span>: Repository analysis, Architecture Map, Sentinel, and <strong>PR Risk Reviewer</strong>.<br>
-    <span style="color:var(--amber)">● Developer</span>: Repository exploration, Ask Why, and Sentinel. Cannot review PRs or manage users.
-  </div>
-  <div id="users-table-wrap" style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left">
-      <thead>
-        <tr style="border-bottom:1px solid var(--line);color:var(--muted);font:10px var(--mono)">
-          <th style="padding:10px 12px">USER</th>
-          <th style="padding:10px 12px">GITHUB ID</th>
-          <th style="padding:10px 12px">ASSIGNED ROLE</th>
-          <th style="padding:10px 12px">ACCOUNT STATUS</th>
-          <th style="padding:10px 12px">REGISTERED</th>
-          <th style="padding:10px 12px">ACTIONS</th>
-        </tr>
-      </thead>
-      <tbody id="users-tbody">
-        <tr><td colspan="6" class="empty">Loading registered users…</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
 </section>
 
 <!-- CODEWHY SECURITY & TRUST CENTER -->
@@ -604,7 +560,7 @@
         </div>
         <div style="background:#131c26;border-left:3px solid var(--amber);border-radius:6px;padding:12px">
           <strong style="color:var(--amber);font-size:12px;display:block">Layer 3: Identity & Access Control (GitHub OAuth 2.0 & Backend RBAC)</strong>
-          <p style="color:var(--muted);font-size:11px;margin:3px 0 0;line-height:1.5">Cryptographically unguessable state parameter with HttpOnly SameSite=Lax cookie preventing CSRF login attacks. Enforced server-side roles (Admin, Reviewer, Developer) restricting sensitive APIs regardless of frontend client behavior.</p>
+          <p style="color:var(--muted);font-size:11px;margin:3px 0 0;line-height:1.5">Cryptographically unguessable state parameter with HttpOnly SameSite=Lax cookie preventing CSRF login attacks. Enforced server-side session and CSRF verification protecting sensitive APIs across all platform features.</p>
         </div>
         <div style="background:#131c26;border-left:3px solid #b388ff;border-radius:6px;padding:12px">
           <strong style="color:#b388ff;font-size:12px;display:block">Layer 4: Data Protection & Credential Isolation</strong>
@@ -1066,7 +1022,7 @@
       <div>
         <strong id="user-modal-name" style="font-size:14px;display:block"></strong>
         <span id="user-modal-login" style="font:11px var(--mono);color:var(--muted)"></span>
-        <div style="margin-top:4px"><span id="user-modal-role" class="sev" style="background:#263b37;color:var(--lime)">DEVELOPER</span></div>
+        <div style="margin-top:4px"><span class="sev" style="background:#1d2936;color:var(--cyan)">TEAM MEMBER</span></div>
       </div>
     </div>
     <div style="padding:14px 0;font-size:12px;color:var(--muted);line-height:1.7">
@@ -2255,13 +2211,10 @@ function escapeHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;'
     if(name==='trust')loadTrustCenter();
     if(name==='shield')loadSecurityShield();
     if(name==='pr'){
-      const isReviewerOrAdmin=state.role==='reviewer'||state.role==='admin';
-      const prWarning=$('pr-role-warning');
       const prBtn=$('pr-btn');
-      if(prWarning)prWarning.style.display=isReviewerOrAdmin?'none':'block';
       if(prBtn){
-        prBtn.disabled=!isReviewerOrAdmin;
-        prBtn.title=isReviewerOrAdmin?'':'Reviewer or Admin role required to review pull requests';
+        prBtn.disabled=false;
+        prBtn.title='';
       }
     }
     if(name==='graph'&&state.graph)requestAnimationFrame(()=>renderGraph(state.graph));
@@ -2425,11 +2378,6 @@ function openUserProfileModal(user,auth){
   if(!modal)return;
   $('user-modal-name').textContent=user.name||user.login||'GitHub User';
   $('user-modal-login').textContent='@'+(user.login||'user');
-  const roleSpan=$('user-modal-role');
-  if(roleSpan){
-    roleSpan.textContent=(user.role||'developer').toUpperCase();
-    roleSpan.style.color=user.role==='admin'?'var(--cyan)':(user.role==='reviewer'?'var(--amber)':'var(--lime)');
-  }
   const avatarImg=$('user-modal-avatar');
   if(avatarImg){
     if(user.avatar_url){
@@ -2667,10 +2615,10 @@ TARGET: GET /api/trust-center
   → Restricts browser hardware APIs (camera, geolocation, payments disabled).`;
     }
 
-    if(typeof loadSecurityEvents==='function'&&state.currentUser?.role==='admin'){
+    if(typeof loadSecurityEvents==='function'){
       setTimeout(loadSecurityEvents,500);
     }
-    if(typeof loadSecurityShield==='function'&&state.currentUser?.role==='admin'){
+    if(typeof loadSecurityShield==='function'){
       setTimeout(loadSecurityShield,500);
     }
   }catch(err){
@@ -2824,17 +2772,17 @@ async function loadSecurityShield(){
     await loadSecurityIncidents();
     await loadSecurityEvents();
   }catch(err){
-    if(err.message.includes('Administrator') || err.message.includes('Sign in') || err.message.includes('401') || err.message.includes('403')){
+    if(err.message.includes('Sign in') || err.message.includes('401')){
       if($('sh-status'))$('sh-status').textContent='ACTIVE (Edge + App)';
-      if($('sh-events-24h'))$('sh-events-24h').textContent='Admin Only';
-      if($('sh-blocked-24h'))$('sh-blocked-24h').textContent='Admin Only';
-      if($('sh-ratelimit-24h'))$('sh-ratelimit-24h').textContent='Admin Only';
-      if($('sh-auth-failures-24h'))$('sh-auth-failures-24h').textContent='Admin Only';
-      if($('sh-open-incidents'))$('sh-open-incidents').textContent='Admin Only';
+      if($('sh-events-24h'))$('sh-events-24h').textContent='0';
+      if($('sh-blocked-24h'))$('sh-blocked-24h').textContent='0';
+      if($('sh-ratelimit-24h'))$('sh-ratelimit-24h').textContent='0';
+      if($('sh-auth-failures-24h'))$('sh-auth-failures-24h').textContent='0';
+      if($('sh-open-incidents'))$('sh-open-incidents').textContent='0';
       const incTbody=$('incidents-tbody');
-      if(incTbody)incTbody.innerHTML='<tr><td colspan="6" class="empty" style="color:var(--amber)">Administrator role required to triage security incidents. You can still test live firewall interception below.</td></tr>';
+      if(incTbody)incTbody.innerHTML='<tr><td colspan="6" class="empty" style="color:var(--amber)">Sign in with GitHub to triage security incidents. You can still test live firewall interception below.</td></tr>';
       const secTbody=$('sec-events-tbody');
-      if(secTbody)secTbody.innerHTML='<tr><td colspan="7" class="empty" style="color:var(--amber)">Administrator role required to stream live security events. Run the Attack Simulator below to test live WAF blocking.</td></tr>';
+      if(secTbody)secTbody.innerHTML='<tr><td colspan="7" class="empty" style="color:var(--amber)">Sign in with GitHub to stream live security events. Run the Attack Simulator below to test live WAF blocking.</td></tr>';
       return;
     }
     toast(err.message||'Failed to load Security Shield');
@@ -2967,7 +2915,7 @@ async function submitNewIncident(e){
   };
   try{
     let res;
-    if(state.currentUser?.role === 'admin'){
+    if(state.authenticated){
       res = await api('/api/admin/security/incidents',{
         method:'POST',
         body:JSON.stringify(payload)
@@ -3025,7 +2973,7 @@ async function submitNewIncident(e){
     state.authStatus=auth;
     state.authenticated=!!auth.authenticated;
     state.currentUser=auth.user;
-    state.role=auth.user?.role||'developer';
+    state.role='all';
 
     if(auth.oauth_configured){
       $('auth-action').style.display='inline-block';
@@ -3047,32 +2995,13 @@ async function submitNewIncident(e){
           avatar.textContent=(auth.user.login||'U').slice(0,1).toUpperCase();
         }
       }
-      const rolePill=$('role-pill');
-      if(rolePill){
-        rolePill.style.display='inline-block';
-        rolePill.textContent=auth.user.role.toUpperCase();
-        if(auth.user.role==='admin'){
-          rolePill.style.color='var(--cyan)';
-          rolePill.style.borderColor='#1d3e4a';
-        }else if(auth.user.role==='reviewer'){
-          rolePill.style.color='var(--amber)';
-          rolePill.style.borderColor='#4a3b1a';
-        }else{
-          rolePill.style.color='var(--lime)';
-          rolePill.style.borderColor='#354334';
-        }
-      }
-      $('mode-pill').textContent=auth.user.role.toUpperCase()+' WORKSPACE';
+      $('mode-pill').textContent='WORKSPACE';
       const myReposBtn=$('my-repos-btn');
       const curCrumb=document.querySelector('.crumb span')?.textContent;
       if(myReposBtn)myReposBtn.style.display=(curCrumb==='OVERVIEW'||!curCrumb)?'inline-block':'none';
 
-      const navUsersBtn=$('nav-users-btn');
-      if(navUsersBtn)navUsersBtn.style.display=auth.user.role==='admin'?'block':'none';
-      if(auth.user.role==='admin'){
-        const auditBtn=$('audit-btn');
-        if(auditBtn)auditBtn.style.display='inline-block';
-      }
+      const auditBtn=$('audit-btn');
+      if(auditBtn)auditBtn.style.display='inline-block';
     }
 
     $('avatar')?.addEventListener('click',()=>{
