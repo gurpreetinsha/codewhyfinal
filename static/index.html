@@ -1093,10 +1093,12 @@ async function runSentinelCodeReview(){
   const path=$('sentinel-code-file')?.value;
   if(!repoId)return toast('Scan a repository first');
   if(!path)return toast('Choose a source file');
+  if(!state.authenticated)return toast('Sign in with GitHub before requesting an AI code replacement');
   const b=$('sentinel-code-review-btn');
   setLoading(b,true);b.textContent='Reviewing…';
   $('sentinel-code-status').textContent='Checking syntax and security signals, then requesting an AI code review…';
   $('sentinel-code-review').style.display='none';
+  sentinelCodeHelperResult=null;sentinelCodeOriginal='';
   $('sentinel-code-commit-status').textContent='';
   $('sentinel-code-confirm').checked=false;
   $('sentinel-code-commit-btn').disabled=true;
