@@ -191,10 +191,10 @@ def persist_graph(graph: dict[str, Any]) -> None:
     if not driver:
         return
     repo_id = graph["id"]
-    nodes = graph["nodes"]
-    files = [n for n in nodes if n["type"] == "file"]
-    symbols = [n for n in nodes if n["type"] != "file"]
-    edges = graph["edges"]
+    files = [n for n in graph["nodes"] if n["type"] == "file"]
+    symbols = [n for n in graph["nodes"] if n["type"] != "file"]
+    edges = [e for e in graph["edges"] if e["type"] in {"IMPORTS", "CALLS"}]
+
     with driver.session(database=NEO4J_DATABASE) as session:
         def write(tx):
             tx.run(
@@ -207,96 +207,82 @@ def persist_graph(graph: dict[str, Any]) -> None:
                 scanned_at=graph["scanned_at"],
                 metadata=json.dumps(graph["metadata"]),
             )
-            tx.run(
-                "MATCH (r:Repository {id:$repo}) "
-                "UNWIND $files AS item "
-                "CREATE (f:File {id:item.id, path:item.path, label:item.label, "
-                "language:item.language, lines:item.lines}) "
-                "CREATE (r)-[:CONTAINS]->(f)",
-                repo=repo_id,
-                files=[{k: n.get(k) for k in ("id", "path", "label", "language", "lines")} for n in files],
-            )
-            tx.run(
-                "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(f:File) "
-                "UNWIND $symbols AS item "
-                "MATCH (f {path:item.path}) "
-                "CALL { WITH f, item "
-                "  WITH f, item WHERE item.type='function' "
-                "  CREATE (n:Function {id:item.id, name:item.label, path:item.path, line:item.line, args:item.args}) "
-                "  CREATE (f)-[:DEFINES]->(n) "
-                "  RETURN count(*) AS created "
-                "  UNION "
-                "  WITH f, item "
-                "  WITH f, item WHERE item.type='class' "
-                "  CREATE (n:CodeClass {id:item.id, name:item.label, path:item.path, line:item.line}) "
-                "  CREATE (f)-[:DEFINES]->(n) "
-                "  RETURN count(*) AS created "
-                "} RETURN count(*)",
-                repo=repo_id,
-                symbols=[{k: n.get(k) for k in ("id", "path", "label", "type", "line", "args")} for n in symbols],
-            )
-            tx.run(
-                "UNWIND $edges AS item "
-                "MATCH (a {id:item.source}), (b {id:item.target}) "
-                "WITH a,b,item WHERE item.type IN ['IMPORTS','CALLS'] "
-                "CALL { WITH a,b,item "
-                "  WITH a,b,item WHERE item.type='IMPORTS' "
-                "  CREATE (a)-[:IMPORTS]->(b) RETURN count(*) AS created "
-                "  UNION "
-                "  WITH a,b,item "
-                "  WITH a,b,item WHERE item.type='CALLS' "
-                "  CREATE (a)-[:CALLS]->(b) RETURN count(*) AS created "
-                "}",
-                edges=[{"source": e["source"], "target": e["target"], "type": e["type"]}
-                       for e in edges if e["type"] in {"IMPORTS", "CALLS"}],
-            )
+            if files:
+                tx.run(
+                    "MATCH (r:Repository {id:$repo}) "
+                    "UNWIND $files AS item "
+                    "CREATE (f:File {id:item.id, path:item.path, label:item.label, "
+                    "language:item.language, lines:item.lines}) "
+                    "CREATE (r)-[:CONTAINS]->(f)",
+                    repo=repo_id,
+                    files=[{k: n.get(k) for k in ("id", "path", "label", "language", "lines")} for n in files],
+                )
+            if symbols:
+                tx.run(
+                    "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(f:File) "
+                    "UNWIND $symbols AS item "
+                    "WITH f,item WHERE f.path=item.path "
+                    "FOREACH (_ IN CASE WHEN item.type='function' THEN [1] ELSE [] END | "
+                    "  CREATE (n:Function {id:item.id, name:item.label, path:item.path, line:item.line, args:item.args}) "
+                    "  CREATE (f)-[:DEFINES]->(n)) "
+                    "FOREACH (_ IN CASE WHEN item.type='class' THEN [1] ELSE [] END | "
+                    "  CREATE (n:CodeClass {id:item.id, name:item.label, path:item.path, line:item.line}) "
+                    "  CREATE (f)-[:DEFINES]->(n))",
+                    repo=repo_id,
+                    symbols=[{k: n.get(k) for k in ("id", "path", "label", "type", "line", "args")} for n in symbols],
+                )
+            if edges:
+                tx.run(
+                    "UNWIND $edges AS item "
+                    "MATCH (a {id:item.source}), (b {id:item.target}) "
+                    "FOREACH (_ IN CASE WHEN item.type='IMPORTS' THEN [1] ELSE [] END | "
+                    "  CREATE (a)-[:IMPORTS]->(b)) "
+                    "FOREACH (_ IN CASE WHEN item.type='CALLS' THEN [1] ELSE [] END | "
+                    "  CREATE (a)-[:CALLS]->(b))",
+                    edges=[{"source": e["source"], "target": e["target"], "type": e["type"]} for e in edges],
+                )
         session.execute_write(write)
 
 
 def load_graph_from_neo4j(repo_id: str, graph_template: dict[str, Any]) -> dict[str, Any]:
-    """Read nodes and relationships back from Neo4j; this is the graph served to the UI."""
+    """Read persisted Neo4j nodes and relationships back for the API/UI response."""
     if not driver:
         return graph_template
     with driver.session(database=NEO4J_DATABASE) as session:
-        result = session.run(
-            "MATCH (r:Repository {id:$repo}) "
-            "OPTIONAL MATCH (r)-[:CONTAINS]->(f:File) "
-            "OPTIONAL MATCH (f)-[definition:DEFINES]->(symbol) "
-            "WITH collect(DISTINCT f) AS files, collect(DISTINCT "
-            "CASE WHEN symbol IS NULL THEN NULL ELSE {node:symbol, file:f} END) AS symbols "
-            "UNWIND files AS f "
+        file_rows = list(session.run(
+            "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(f:File) "
             "RETURN f.id AS id, f.path AS path, f.label AS label, "
-            "f.language AS language, f.lines AS lines, "
-            "[] AS unused",
+            "f.language AS language, f.lines AS lines ORDER BY f.path",
             repo=repo_id,
-        )
-        file_rows = list(result)
+        ))
         symbol_rows = list(session.run(
-            "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(f:File)-[:DEFINES]->(s) "
+            "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(:File)-[:DEFINES]->(s) "
             "RETURN s.id AS id, s.name AS label, s.path AS path, "
             "s.line AS line, s.args AS args, "
-            "CASE WHEN s:Function THEN 'function' ELSE 'class' END AS type",
+            "CASE WHEN s:Function THEN 'function' ELSE 'class' END AS type "
+            "ORDER BY s.path, s.line, s.name",
             repo=repo_id,
         ))
         edge_rows = list(session.run(
             "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(a:File) "
             "MATCH (a)-[rel:IMPORTS|CALLS]->(b) "
             "RETURN a.id AS source, b.id AS target, type(rel) AS type, "
-            "a.path AS source_path, b.path AS target_path",
+            "a.path AS source_path, b.path AS target_path "
+            "ORDER BY source, target, type",
             repo=repo_id,
         ))
-        files = [{
-            "id": row["id"], "label": row["label"], "type": "file",
-            "path": row["path"], "language": row["language"], "lines": row["lines"],
-        } for row in file_rows]
-        symbols = [{
-            "id": row["id"], "label": row["label"], "type": row["type"],
-            "path": row["path"], "line": row["line"], "args": row["args"],
-        } for row in symbol_rows]
-        edges = [{
-            "source": row["source"], "target": row["target"], "type": row["type"],
-            "source_path": row["source_path"], "target_path": row["target_path"],
-        } for row in edge_rows]
+    files = [{
+        "id": row["id"], "label": row["label"], "type": "file",
+        "path": row["path"], "language": row["language"], "lines": row["lines"],
+    } for row in file_rows]
+    symbols = [{
+        "id": row["id"], "label": row["label"], "type": row["type"],
+        "path": row["path"], "line": row["line"], "args": row["args"],
+    } for row in symbol_rows]
+    edges = [{
+        "source": row["source"], "target": row["target"], "type": row["type"],
+        "source_path": row["source_path"], "target_path": row["target_path"],
+    } for row in edge_rows]
     loaded = dict(graph_template)
     loaded["nodes"] = files + symbols
     loaded["edges"] = edges
