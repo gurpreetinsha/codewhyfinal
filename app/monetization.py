@@ -5,6 +5,7 @@ This module is additive: it does not alter CODEWHY's existing analysis pipeline.
 from __future__ import annotations
 
 import os
+import sqlite3
 import time
 from typing import Any
 
@@ -95,8 +96,15 @@ def save_sarvam_key(github_id: int, api_key: str) -> None:
 def get_sarvam_key(github_id: int | None) -> str:
     if not github_id:
         return ""
-    with _db() as conn:
-        row = conn.execute("SELECT key_ciphertext FROM user_sarvam_keys WHERE github_id=?", (github_id,)).fetchone()
+    try:
+        with _db() as conn:
+            row = conn.execute("SELECT key_ciphertext FROM user_sarvam_keys WHERE github_id=?", (github_id,)).fetchone()
+    except sqlite3.OperationalError as exc:
+        # Some existing tests/tools recreate the auth database after app import.
+        # Treat an absent optional BYOK table as "no personal key", not an app outage.
+        if "no such table" in str(exc).lower():
+            return ""
+        raise
     return decrypt_token(row["key_ciphertext"]) if row else ""
 
 
