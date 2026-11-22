@@ -1219,6 +1219,8 @@ async def sentinel_code_helper_analyze(req: CodeHelperAnalyzeRequest, request: R
     if len(source) > 45000:
         raise HTTPException(413, "This file is too large for one review. Choose a smaller file.")
     redacted = redact_source(source)
+    if redacted != source:
+        raise HTTPException(422, "This file contains credential-like values. Remove or rotate secrets before requesting an AI replacement; no redacted placeholder will be committed.")
     static_signals = []
     if PurePosixPath(req.path).suffix.lower() == ".py":
         try:
