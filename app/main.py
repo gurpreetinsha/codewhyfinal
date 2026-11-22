@@ -635,6 +635,13 @@ async def get_graph(repo_id: str):
     graph = REPOS.get(repo_id)
     if not graph:
         raise HTTPException(404, "Repository has not been scanned in this app session")
+    if driver:
+        try:
+            graph = load_graph_from_neo4j(repo_id, graph)
+            REPOS[repo_id] = graph
+        except Exception as exc:
+            print(f"[CODEWHY] Neo4j graph read failed: {exc}")
+            raise HTTPException(503, "Could not read the repository graph from Neo4j.")
     return graph_view(graph)
 
 @app.get("/api/repos/{repo_id:path}/debt")
