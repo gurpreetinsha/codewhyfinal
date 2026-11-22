@@ -187,22 +187,127 @@ def build_graph(repo_id: str, files: dict[str, str], metadata: dict[str, Any] | 
     return {"id": repo_id, "files": parsed, "nodes": nodes, "edges": edges, "stats": stats, "metadata": metadata or {}, "scanned_at": int(time.time())}
 
 def persist_graph(graph: dict[str, Any]) -> None:
+    """Replace the repository subgraph atomically with the analyzed graph."""
     if not driver:
         return
     repo_id = graph["id"]
-    driver.execute_query("MERGE (r:Repository {id:$id}) SET r.name=$name, r.scanned_at=$scanned_at", id=repo_id, name=graph["metadata"].get("full_name", repo_id), scanned_at=graph["scanned_at"], database_=NEO4J_DATABASE)
-    driver.execute_query("MATCH (r:Repository {id:$id})-[:CONTAINS]->(f:File) OPTIONAL MATCH (f)-[:DEFINES]->(n) WITH collect(DISTINCT f) + collect(DISTINCT n) AS stale UNWIND stale AS node DETACH DELETE node", id=repo_id, database_=NEO4J_DATABASE)
-    for node in graph["nodes"]:
-        if node["type"] == "file":
-            driver.execute_query("MATCH (r:Repository {id:$repo}) MERGE (f:File {id:$id}) SET f.path=$path, f.label=$label, f.language=$language, f.lines=$lines MERGE (r)-[:CONTAINS]->(f)", repo=repo_id, id=node["id"], path=node["path"], label=node["label"], language=node["language"], lines=node["lines"], database_=NEO4J_DATABASE)
-        else:
-            label = "Function" if node["type"] == "function" else "CodeClass"
-            driver.execute_query(f"MATCH (r:Repository {{id:$repo}})-[:CONTAINS]->(f:File {{path:$path}}) MERGE (n:{label} {{id:$id}}) SET n.name=$name, n.path=$path, n.line=$line MERGE (f)-[:DEFINES]->(n)", repo=repo_id, path=node["path"], id=node["id"], name=node["label"], line=node.get("line", 0), database_=NEO4J_DATABASE)
-    for edge in graph["edges"]:
-        if edge["type"] == "IMPORTS":
-            driver.execute_query("MATCH (a:File {id:$source}), (b:File {id:$target}) MERGE (a)-[:IMPORTS]->(b)", source=edge["source"], target=edge["target"], database_=NEO4J_DATABASE)
-        elif edge["type"] == "CALLS":
-            driver.execute_query("MATCH (a:File {id:$source}), (b:Function {id:$target}) MERGE (a)-[:CALLS]->(b)", source=edge["source"], target=edge["target"], database_=NEO4J_DATABASE)
+    nodes = graph["nodes"]
+    files = [n for n in nodes if n["type"] == "file"]
+    symbols = [n for n in nodes if n["type"] != "file"]
+    edges = graph["edges"]
+    with driver.session(database=NEO4J_DATABASE) as session:
+        def write(tx):
+            tx.run(
+                "MERGE (r:Repository {id:$id}) "
+                "SET r.name=$name, r.scanned_at=$scanned_at, r.metadata=$metadata "
+                "WITH r OPTIONAL MATCH (r)-[:CONTAINS]->(old:File) "
+                "DETACH DELETE old",
+                id=repo_id,
+                name=graph["metadata"].get("full_name", repo_id),
+                scanned_at=graph["scanned_at"],
+                metadata=json.dumps(graph["metadata"]),
+            )
+            tx.run(
+                "MATCH (r:Repository {id:$repo}) "
+                "UNWIND $files AS item "
+                "CREATE (f:File {id:item.id, path:item.path, label:item.label, "
+                "language:item.language, lines:item.lines}) "
+                "CREATE (r)-[:CONTAINS]->(f)",
+                repo=repo_id,
+                files=[{k: n.get(k) for k in ("id", "path", "label", "language", "lines")} for n in files],
+            )
+            tx.run(
+                "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(f:File) "
+                "UNWIND $symbols AS item "
+                "MATCH (f {path:item.path}) "
+                "CALL { WITH f, item "
+                "  WITH f, item WHERE item.type='function' "
+                "  CREATE (n:Function {id:item.id, name:item.label, path:item.path, line:item.line, args:item.args}) "
+                "  CREATE (f)-[:DEFINES]->(n) "
+                "  RETURN count(*) AS created "
+                "  UNION "
+                "  WITH f, item "
+                "  WITH f, item WHERE item.type='class' "
+                "  CREATE (n:CodeClass {id:item.id, name:item.label, path:item.path, line:item.line}) "
+                "  CREATE (f)-[:DEFINES]->(n) "
+                "  RETURN count(*) AS created "
+                "} RETURN count(*)",
+                repo=repo_id,
+                symbols=[{k: n.get(k) for k in ("id", "path", "label", "type", "line", "args")} for n in symbols],
+            )
+            tx.run(
+                "UNWIND $edges AS item "
+                "MATCH (a {id:item.source}), (b {id:item.target}) "
+                "WITH a,b,item WHERE item.type IN ['IMPORTS','CALLS'] "
+                "CALL { WITH a,b,item "
+                "  WITH a,b,item WHERE item.type='IMPORTS' "
+                "  CREATE (a)-[:IMPORTS]->(b) RETURN count(*) AS created "
+                "  UNION "
+                "  WITH a,b,item "
+                "  WITH a,b,item WHERE item.type='CALLS' "
+                "  CREATE (a)-[:CALLS]->(b) RETURN count(*) AS created "
+                "}",
+                edges=[{"source": e["source"], "target": e["target"], "type": e["type"]}
+                       for e in edges if e["type"] in {"IMPORTS", "CALLS"}],
+            )
+        session.execute_write(write)
+
+
+def load_graph_from_neo4j(repo_id: str, graph_template: dict[str, Any]) -> dict[str, Any]:
+    """Read nodes and relationships back from Neo4j; this is the graph served to the UI."""
+    if not driver:
+        return graph_template
+    with driver.session(database=NEO4J_DATABASE) as session:
+        result = session.run(
+            "MATCH (r:Repository {id:$repo}) "
+            "OPTIONAL MATCH (r)-[:CONTAINS]->(f:File) "
+            "OPTIONAL MATCH (f)-[definition:DEFINES]->(symbol) "
+            "WITH collect(DISTINCT f) AS files, collect(DISTINCT "
+            "CASE WHEN symbol IS NULL THEN NULL ELSE {node:symbol, file:f} END) AS symbols "
+            "UNWIND files AS f "
+            "RETURN f.id AS id, f.path AS path, f.label AS label, "
+            "f.language AS language, f.lines AS lines, "
+            "[] AS unused",
+            repo=repo_id,
+        )
+        file_rows = list(result)
+        symbol_rows = list(session.run(
+            "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(f:File)-[:DEFINES]->(s) "
+            "RETURN s.id AS id, s.name AS label, s.path AS path, "
+            "s.line AS line, s.args AS args, "
+            "CASE WHEN s:Function THEN 'function' ELSE 'class' END AS type",
+            repo=repo_id,
+        ))
+        edge_rows = list(session.run(
+            "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(a:File) "
+            "MATCH (a)-[rel:IMPORTS|CALLS]->(b) "
+            "RETURN a.id AS source, b.id AS target, type(rel) AS type, "
+            "a.path AS source_path, b.path AS target_path",
+            repo=repo_id,
+        ))
+        files = [{
+            "id": row["id"], "label": row["label"], "type": "file",
+            "path": row["path"], "language": row["language"], "lines": row["lines"],
+        } for row in file_rows]
+        symbols = [{
+            "id": row["id"], "label": row["label"], "type": row["type"],
+            "path": row["path"], "line": row["line"], "args": row["args"],
+        } for row in symbol_rows]
+        edges = [{
+            "source": row["source"], "target": row["target"], "type": row["type"],
+            "source_path": row["source_path"], "target_path": row["target_path"],
+        } for row in edge_rows]
+    loaded = dict(graph_template)
+    loaded["nodes"] = files + symbols
+    loaded["edges"] = edges
+    loaded["stats"] = {
+        **graph_template["stats"],
+        "files": len(files),
+        "functions": sum(n["type"] == "function" for n in symbols),
+        "classes": sum(n["type"] == "class" for n in symbols),
+        "imports": sum(e["type"] == "IMPORTS" for e in edges),
+    }
+    return loaded
 
 def numbered_excerpt(content: str, max_chars: int) -> str:
     content = redact_source(content)
@@ -210,7 +315,7 @@ def numbered_excerpt(content: str, max_chars: int) -> str:
     return numbered[:max_chars]
 
 def graph_view(graph: dict[str, Any]) -> dict[str, Any]:
-    return {"nodes": graph["nodes"][:180], "edges": graph["edges"][:300], "files": {p: {"lines": info["lines"], "language": info["language"]} for p, info in graph["files"].items()}, "stats": graph["stats"], "metadata": graph["metadata"], "scanned_at": graph["scanned_at"]}
+    return {"nodes": graph["nodes"], "edges": graph["edges"], "files": {p: {"lines": info["lines"], "language": info["language"]} for p, info in graph["files"].items()}, "stats": graph["stats"], "metadata": graph["metadata"], "scanned_at": graph["scanned_at"]}
 
 def debt_report(graph: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
@@ -521,11 +626,17 @@ async def scan(req: ScanRequest, request: Request):
     REPOS[graph["id"]] = graph
     REPO_OWNERS[graph["id"]] = user["login"] if user else "anonymous"
     audit(user, "repository.scan", graph["id"], f"Loaded {len(files)} files")
-    try:
-        persist_graph(graph)
-    except Exception as exc:
-        print(f"[CODEWHY] Graph persistence failed: {exc}")
-    return {"repository": graph_view(graph), "debt": debt_report(graph), "id": graph["id"], "storage": "neo4j" if driver else "memory"}
+    storage = "memory"
+    if driver:
+        try:
+            persist_graph(graph)
+            graph = load_graph_from_neo4j(graph["id"], graph)
+            REPOS[graph["id"]] = graph
+            storage = "neo4j"
+        except Exception as exc:
+            print(f"[CODEWHY] Graph persistence/readback failed: {exc}")
+            raise HTTPException(503, "Neo4j graph persistence failed; no in-memory substitute was returned.")
+    return {"repository": graph_view(graph), "debt": debt_report(graph), "id": graph["id"], "storage": storage}
 
 @app.get("/api/repos")
 async def repos(request: Request):
