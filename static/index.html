@@ -1315,8 +1315,10 @@ function renderSentinelGraph(g, attackPaths, findings, resetView = false) {
   const w = el.clientWidth || 750, h = 440;
 
   if (g && (g.nodes || g.edges)) {
-    sentinelGraphState.nodes = (g.nodes || []).slice(0, 60);
-    sentinelGraphState.edges = (g.edges || []).slice(0, 110);
+    // Render the complete repository graph. Neo4j stores the full topology;
+    // truncating here made the website and Bloom appear to contain different graphs.
+    sentinelGraphState.nodes = (g.nodes || []).slice();
+    sentinelGraphState.edges = (g.edges || []).slice();
   }
   if (attackPaths) sentinelGraphState.attackPaths = attackPaths;
   if (findings) sentinelGraphState.findings = findings;

@@ -81,6 +81,92 @@ def test_sentinel_graph_construction_and_node_types():
     assert "DEFINES" in edge_types
     assert "DEPENDS_ON" in edge_types
     assert "CONTAINS" in edge_types
+    dependency_edge = next(edge for edge in sentinel_graph["edges"] if edge["type"] == "DEPENDS_ON")
+    assert dependency_edge["source"] == "test::repo"
+
+
+def test_sentinel_graph_persistence_writes_all_nodes_and_relationships_atomically():
+    from app.sentinel import persist_sentinel_graph
+
+    class FakeTx:
+        def __init__(self):
+            self.calls = []
+
+        def run(self, query, **params):
+            self.calls.append((query, params))
+
+    class FakeSession:
+        def __init__(self, tx):
+            self.tx = tx
+            self.write_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute_write(self, callback):
+            self.write_count += 1
+            return callback(self.tx)
+
+    class FakeDriver:
+        def __init__(self):
+            self.tx = FakeTx()
+            self.session_obj = FakeSession(self.tx)
+            self.database = None
+
+        def session(self, database):
+            self.database = database
+            return self.session_obj
+
+    repo_id = "alice::org/repo"
+    node_types = [
+        "file", "function", "class", "api", "dependency",
+        "security_finding", "vulnerability", "technical_decision",
+    ]
+    nodes = [{"id": repo_id, "type": "repository", "label": "org/repo"}]
+    for node_type in node_types:
+        nodes.append({
+            "id": f"{node_type}:{repo_id}:item",
+            "type": node_type,
+            "label": f"{node_type} item",
+            "path": "src/app.py",
+            "line": 1,
+        })
+    relationship_types = [
+        "CONTAINS", "DEFINES", "IMPORTS", "CALLS", "DEPENDS_ON",
+        "MODIFIES", "AFFECTS", "INTRODUCES", "FIXES", "REVIEWED_IN", "RELATED_TO",
+    ]
+    edges = [
+        {"source": repo_id, "target": f"file:{repo_id}:item", "type": "CONTAINS"}
+    ]
+    for relationship_type in relationship_types:
+        edges.append({
+            "source": f"file:{repo_id}:item",
+            "target": f"function:{repo_id}:item",
+            "type": relationship_type,
+        })
+
+    driver = FakeDriver()
+    persist_sentinel_graph(driver, "neo4j", {
+        "id": repo_id,
+        "metadata": {"full_name": "org/repo"},
+        "nodes": nodes,
+        "edges": edges,
+    })
+
+    assert driver.database == "neo4j"
+    assert driver.session_obj.write_count == 1
+    queries = "\n".join(query for query, _ in driver.tx.calls)
+    for label in ("File", "Function", "CodeClass", "API", "Dependency",
+                  "SecurityFinding", "Vulnerability", "TechnicalDecision"):
+        assert f"MERGE (n:{label}" in queries
+    for relationship_type in relationship_types:
+        assert f"[:{relationship_type}]" in queries
+    assert "STARTS WITH prefix" in queries
+    assert any(params.get("metadata") == json.dumps({"full_name": "org/repo"})
+               for _, params in driver.tx.calls)
 
 
 def test_security_sensitive_components_and_attack_path_reconstruction():
