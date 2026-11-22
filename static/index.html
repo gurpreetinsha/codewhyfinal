@@ -2756,6 +2756,7 @@ async function submitNewIncident(e){
     const auth=await api('/api/auth/status');
     state.csrf=auth.csrf_token||'';
     state.authStatus=auth;
+    state.authenticated=!!auth.authenticated;
     state.currentUser=auth.user;
     state.role=auth.user?.role||'developer';
 
