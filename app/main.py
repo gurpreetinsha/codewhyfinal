@@ -173,11 +173,14 @@ def _resolve_import(source: str, module: str, known: set[str]) -> str | None:
 def build_graph(repo_id: str, files: dict[str, str], metadata: dict[str, Any] | None = None) -> dict[str, Any]:
     parsed = {p: _parse_file(p, c) for p, c in files.items()}
     known = set(parsed)
-    nodes, edges = [], []
+    repository_label = (metadata or {}).get("full_name") or repo_id
+    nodes = [{"id": repo_id, "label": repository_label, "type": "repository", "path": ""}]
+    edges = []
     file_to_functions: dict[str, list[str]] = defaultdict(list)
     for path, info in parsed.items():
         fid = f"file:{repo_id}:{path}"
         nodes.append({"id": fid, "label": PurePosixPath(path).name, "type": "file", "path": path, "language": info["language"], "lines": info["lines"]})
+        edges.append({"source": repo_id, "target": fid, "type": "CONTAINS", "source_path": "", "target_path": path})
         for fn in info["functions"]:
             nid = f"fn:{repo_id}:{path}:{fn['name']}"
             file_to_functions[path].append(nid)
@@ -203,6 +206,9 @@ def build_graph(repo_id: str, files: dict[str, str], metadata: dict[str, Any] | 
                 if target_path != path:
                     edges.append({"source": f"file:{repo_id}:{path}", "target": f"fn:{repo_id}:{target_path}:{call}", "type": "CALLS", "source_path": path, "target_path": target_path})
     stats = {
+        "repositories": 1,
+        "nodes": len(nodes),
+        "relationships": len(edges),
         "files": len(parsed),
         "functions": sum(len(x["functions"]) for x in parsed.values()),
         "classes": sum(len(x["classes"]) for x in parsed.values()),
@@ -290,14 +296,27 @@ def load_graph_from_neo4j(repo_id: str, graph_template: dict[str, Any]) -> dict[
             "ORDER BY s.path, s.line, s.name",
             repo=repo_id,
         ))
+        repository_rows = list(session.run(
+            "MATCH (r:Repository {id:$repo}) "
+            "RETURN r.id AS id, r.name AS label",
+            repo=repo_id,
+        ))
         edge_rows = list(session.run(
+            "MATCH (r:Repository {id:$repo})-[rel:CONTAINS]->(f:File) "
+            "RETURN r.id AS source, f.id AS target, type(rel) AS type, "
+            "'' AS source_path, f.path AS target_path "
+            "UNION ALL "
             "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(a:File) "
-            "MATCH (a)-[rel:IMPORTS|CALLS]->(b) "
+            "MATCH (a)-[rel:DEFINES|IMPORTS|CALLS]->(b) "
             "RETURN a.id AS source, b.id AS target, type(rel) AS type, "
             "a.path AS source_path, b.path AS target_path "
             "ORDER BY source, target, type",
             repo=repo_id,
         ))
+    repository_nodes = [{
+        "id": row["id"], "label": row["label"] or row["id"],
+        "type": "repository", "path": "",
+    } for row in repository_rows]
     files = [{
         "id": row["id"], "label": row["label"], "type": "file",
         "path": row["path"], "language": row["language"], "lines": row["lines"],
@@ -311,14 +330,17 @@ def load_graph_from_neo4j(repo_id: str, graph_template: dict[str, Any]) -> dict[
         "source_path": row["source_path"], "target_path": row["target_path"],
     } for row in edge_rows]
     loaded = dict(graph_template)
-    loaded["nodes"] = files + symbols
+    loaded["nodes"] = repository_nodes + files + symbols
     loaded["edges"] = edges
     loaded["stats"] = {
         **graph_template["stats"],
+        "repositories": len(repository_nodes),
         "files": len(files),
         "functions": sum(n["type"] == "function" for n in symbols),
         "classes": sum(n["type"] == "class" for n in symbols),
         "imports": sum(e["type"] == "IMPORTS" for e in edges),
+        "nodes": len(repository_nodes) + len(files) + len(symbols),
+        "relationships": len(edges),
     }
     return loaded
 
