@@ -223,3 +223,26 @@ Never commit .env, OAuth secrets, API keys, private keys or repository source sn
 ## License
 
 MIT
+
+
+## Demo subscriptions and Sarvam BYOK
+
+CODEWHY includes an examiner-friendly subscription demonstration at `/account`.
+
+- **Free** — ₹0/month, 50 monthly AI requests, 2 repositories.
+- **Pro** — ₹499/month (illustrative), 1,000 monthly AI requests, 20 repositories.
+- **Business** — ₹1,999/month (illustrative), 5,000 monthly AI requests, 100 repositories.
+- Plan changes are simulated. This demo does **not** collect payments or create real invoices.
+- Successful CODEWHY Sarvam chat completions are counted in the signed-in user's monthly usage. Usage is informational in this demo; existing workspace operations are not blocked when a displayed allowance is reached.
+
+### Bring your own Sarvam AI key
+
+1. Sign in through GitHub.
+2. Open **Plans & API Keys** from the workspace header.
+3. Paste your Sarvam API key and choose **Validate & save**.
+4. CODEWHY checks the key with a minimal Sarvam chat-completion request, then encrypts it server-side. The raw key is never returned to the browser.
+5. To switch back to the deployment-level `SARVAM_API_KEY`, choose **Remove saved key**.
+
+**Required security configuration:** set `SESSION_SECRET` to a random value of at least 32 characters. The existing Fernet encryption helper derives the BYOK encryption key from this secret. Do not commit secrets or API keys to the repository.
+
+**Deployment note:** the current authentication/database layer uses SQLite. Its Vercel `/tmp` fallback is ephemeral and not shared across serverless instances, so it is suitable for a demo but not durable multi-instance subscription/key storage. For production, use a persistent database and a managed secrets/encryption strategy before accepting real customers.
