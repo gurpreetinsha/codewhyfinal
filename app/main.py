@@ -1947,7 +1947,7 @@ async def sentinel_understand_query(req: UnderstandQueryRequest):
     return await understand_multilingual_security_question(
         req.question,
         language_code=req.language_code,
-        sarvam_api_key=SARVAM_API_KEY,
+        sarvam_api_key=current_sarvam_api_key(),
         sarvam_api_base=SARVAM_API_BASE,
         sarvam_model=SARVAM_MODEL
     )
@@ -1982,7 +1982,7 @@ async def sentinel_investigate(req: SentinelInvestigateRequest, request: Request
     understanding = await understand_multilingual_security_question(
         req.question,
         language_code=req.language_code,
-        sarvam_api_key=SARVAM_API_KEY,
+        sarvam_api_key=current_sarvam_api_key(),
         sarvam_api_base=SARVAM_API_BASE,
         sarvam_model=SARVAM_MODEL
     )
@@ -2088,7 +2088,7 @@ async def sentinel_investigate(req: SentinelInvestigateRequest, request: Request
 
     ai_explanation = ""
     ai_provider = "sentinel_deterministic_engine"
-    if SARVAM_API_KEY:
+    if current_sarvam_api_key():
         findings_bullets = []
         for f in investigation_result['investigated_findings'][:5]:
             findings_bullets.append(
@@ -2270,7 +2270,7 @@ async def sentinel_generate_fix(req: GenerateFixRequest):
     ai_explanation = fix_info["fix_summary"]
     provider = "sentinel_deterministic_engine"
 
-    if SARVAM_API_KEY:
+    if current_sarvam_api_key():
         try:
             prompt = (
                 f"Please provide the exact safe corrected code and a clear 2-sentence developer explanation "
