@@ -1334,6 +1334,12 @@ async def sentinel_code_helper_commit(req: CodeHelperCommitRequest, request: Req
             raise HTTPException(422, "GitHub could not provide this file as UTF-8 text.")
         if hashlib.sha256(live_content.encode()).hexdigest() != hashlib.sha256(current["content"].encode()).hexdigest():
             raise HTTPException(409, "This file changed on GitHub after the scan. Rescan the repository before committing.")
+        # Refuse to overwrite an existing branch name.
+        branch_ref = await client.get(f"https://api.github.com/repos/{owner}/{repo}/git/ref/heads/{branch}")
+        if branch_ref.status_code == 200:
+            raise HTTPException(409, "That fix branch already exists. Choose another branch name.")
+        if branch_ref.status_code != 404:
+            raise HTTPException(branch_ref.status_code, "Could not verify that the fix branch name is available.")
         # Create an isolated branch from the current default branch.
         ref_resp = await client.get(f"https://api.github.com/repos/{owner}/{repo}/git/ref/heads/{default_branch}")
         if ref_resp.status_code >= 400:
