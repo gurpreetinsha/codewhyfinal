@@ -46,7 +46,7 @@
 <div class="shell">
 <aside class="sidebar">
 <div class="brand"><div class="mark">C.</div>CODE<span>WHY</span></div>
-<div><div class="side-label">WORKSPACE</div><nav class="nav"><button class="active" data-tab="overview"><span class="ico">◈</span>Overview</button><button data-tab="graph"><span class="ico">⌘</span>Code graph</button><button data-tab="debt"><span class="ico">◉</span>Technical debt</button><button data-tab="ask"><span class="ico">✳</span>Ask CODEWHY</button><button data-tab="security"><span class="ico">⌑</span>Security center</button><button data-tab="investigate"><span class="ico">◎</span>Autonomous investigator</button><button data-tab="pr"><span class="ico">⇄</span>PR risk reviewer</button><button data-tab="change"><span class="ico">⌁</span>Change simulator</button><button data-tab="history"><span class="ico">◷</span>History & reports</button><button data-tab="commits"><span class="ico">⎇</span>Commit history</button></nav></div>
+<div><div class="side-label">WORKSPACE</div><nav class="nav"><button class="active" data-tab="overview"><span class="ico">◈</span>Overview</button><button data-tab="graph"><span class="ico">⌘</span>Code graph</button><button data-tab="debt"><span class="ico">◉</span>Technical debt</button><button data-tab="ask"><span class="ico">✳</span>Ask CODEWHY</button><button data-tab="security"><span class="ico">⌑</span>Security center</button><button data-tab="investigate"><span class="ico">◎</span>Autonomous investigator</button><button data-tab="pr"><span class="ico">⇄</span>PR risk reviewer</button><button data-tab="change"><span class="ico">⌁</span>Change simulator</button><button data-tab="impact-analyzer"><span class="ico">⚡</span>Impact analyzer</button><button data-tab="history"><span class="ico">◷</span>History & reports</button><button data-tab="commits"><span class="ico">⎇</span>Commit history</button></nav></div>
 <div><div class="side-label">YOUR REPOSITORIES</div><nav class="nav"><button id="repo-nav"><span class="ico">⌁</span><span id="repo-name">Atlas Commerce</span></button></nav></div>
 <div class="side-bottom"><div class="status"><strong><span class="dot"></span>System operational</strong><div id="sys-status">Checking integrations…</div><div style="margin-top:8px">CODEWHY v1.0 · Hackathon build</div></div></div>
 </aside>
@@ -96,6 +96,22 @@
 <section class="card feature-section" id="change-section">
 <div class="card-head"><h2>Change simulator</h2><small>PRE-MERGE PREFLIGHT</small></div>
 <div class="feature-body"><p>Paste a unified Git diff and describe the proposed change. CODEWHY will inspect changed paths, existing dependencies and security patterns.</p><input id="change-description" placeholder="What are you changing and why?"><textarea id="change-diff" rows="7" placeholder="diff --git a/src/example.py b/src/example.py&#10;--- a/src/example.py&#10;+++ b/src/example.py&#10;@@ ..."></textarea><div class="feature-actions"><button class="btn primary" id="change-btn">Simulate change →</button><span class="muted-note">Static review only — no code is executed.</span></div><div id="change-result" class="feature-result"></div></div>
+</section>
+<section class="card feature-section" id="impact-analyzer-section" style="display:none">
+  <div class="card-head">
+    <h2>AI Change Impact Analyzer · Pre-Merge Risk Engine</h2>
+    <small>AST DIFFING · BLAST RADIUS · BREAKING CHANGES</small>
+  </div>
+  <div class="feature-body">
+    <p>Analyze your unified git diff before pushing. The engine detects function signature mutations, traces graph ripple effects, and flags missing tests.</p>
+    <input id="impact-desc" placeholder="Feature / Fix summary (e.g. Add stripe webhook verification and refactor charge())">
+    <textarea id="impact-diff" rows="7" placeholder="diff --git a/src/orders/service.py b/src/orders/service.py&#10;--- a/src/orders/service.py&#10;+++ b/src/orders/service.py&#10;@@ -3,2 +3,3 @@&#10;+ def charge(user_id, amount, idempotency_key=None):"></textarea>
+    <div class="feature-actions">
+      <button class="btn primary" id="run-impact-btn">Analyze Blast Radius & Risks →</button>
+      <span class="muted-note">Static AST & Graph traversal · Zero code execution</span>
+    </div>
+    <div id="impact-analysis-result" class="feature-result"></div>
+  </div>
 </section>
 <section class="card feature-section" id="commits-section">
   <div class="card-head"><div><h2>Commit history checker</h2><small>REPOSITORY CHANGE TIMELINE</small></div><div class="commit-toolbar"><input id="commit-search" placeholder="Filter commit messages or authors"><button class="btn primary" id="commit-refresh">Refresh commits →</button></div></div>
@@ -153,14 +169,15 @@ function renderDebt(){if(!state.debt.length){$('debt-list').innerHTML='<div clas
 function renderFiles(){const files=Object.keys(state.repo.files||{});$('file-list').innerHTML=files.slice(0,70).map(p=>`<button class="file-row" data-path="${esc(p)}"><span>⌁ &nbsp;${esc(p)}</span><small>${state.repo.files[p].lines}L</small></button>`).join('')||'<div class="empty">No files available</div>';document.querySelectorAll('.file-row').forEach(b=>b.addEventListener('click',()=>openFile(b.dataset.path)))}
 async function openFile(path){try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/file?path='+encodeURIComponent(path));$('modal-title').textContent=d.path;$('modal-code').textContent=d.content;$('file-insights').textContent='Loading file history…';$('file-modal').classList.add('open');const [history,impact]=await Promise.all([api('/api/repos/'+encodeURIComponent(state.id)+'/history?path='+encodeURIComponent(path)).catch(()=>({commits:[],note:'History unavailable'})),api('/api/repos/'+encodeURIComponent(state.id)+'/impact',{method:'POST',body:JSON.stringify({path})}).catch(()=>null)]);const commits=history.commits||[];$('file-insights').innerHTML='<b style="color:var(--lime)">WHY HISTORY</b> · '+esc(history.note||'Historical commit evidence')+'<br>'+ (commits.length?commits.map(x=>'• '+esc(x.date.slice(0,10))+' — '+esc(x.message)+' <span style="color:#667487">('+esc(x.author)+')</span>').join('<br>'):'No commit entries found for this file.')+(impact?'<br><br><b style="color:var(--cyan)">CHANGE IMPACT</b> · '+impact.count+' transitive dependent file(s) detected. '+(impact.direct_dependents.length?'Direct: '+impact.direct_dependents.map(esc).join(', '):'No direct importers detected.'):'');}catch(e){toast(e.message)}}
 async function scan(){const url=$('repo-url').value.trim();if(!url)return toast('Paste a GitHub repository URL first');const b=$('scan-btn');setLoading(b,true);b.textContent='Scanning…';try{const d=await api('/api/repos/scan',{method:'POST',body:JSON.stringify({url})});render(d);$('mode-pill').textContent='CONNECTED REPOSITORY';toast('Repository scanned successfully')}catch(e){toast(e.message)}finally{setLoading(b,false);b.textContent='Scan repo →'}}
-async function ask(){if(!state.id)return toast('Load demo or scan a repository first');const question=$('question').value.trim();if(!question)return toast('Type a question first');const b=$('ask-btn');setLoading(b,true);b.textContent='Thinking…';$('answer').textContent='Retrieving source evidence and asking Sarvam…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/ask',{method:'POST',body:JSON.stringify({question})});$('answer').innerHTML='<div>'+esc(d.answer).replace(/\n/g,'<br>')+'</div><div class="evidence">'+d.evidence.map(e=>'<button class="evidence-file" data-path="'+esc(e.path)+'">'+esc(e.path)+'</button>').join('')+'</div><div style="color:#657184;font-size:10px;margin-top:10px">Provider: '+esc(d.provider)+' · '+esc(d.disclaimer)+'</div>';wireEvidenceLinks()}catch(e){$('answer').textContent=e.message}finally{setLoading(b,false);b.textContent='Ask →'}}
+async function ask(){if(!state.id)return toast('Load demo or scan a repository first');const question=$('question').value.trim();if(!question)return toast('Type a question first');const b=$('ask-btn');setLoading(b,true);b.textContent='Thinking…';$('answer').textContent='Retrieving source evidence and asking Sarvam…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/ask',{method:'POST',body:JSON.stringify({question})});let res='<div>'+esc(d.answer).replace(/\n/g,'<br>')+'</div><div class="evidence">'+d.evidence.map(e=>'<button class="evidence-file" data-path="'+esc(e.path)+'">'+esc(e.path)+'</button>').join('')+'</div>';if(d.accuracy)res+=renderAccuracyCard(d.accuracy);res+='<div style="color:#657184;font-size:10px;margin-top:10px">Provider: '+esc(d.provider)+' · '+esc(d.disclaimer)+'</div>';$('answer').innerHTML=res;wireEvidenceLinks();}catch(e){$('answer').textContent=e.message}finally{setLoading(b,false);b.textContent='Ask →'}}
 
 function wireEvidenceLinks(){document.querySelectorAll('.evidence-file').forEach(b=>b.addEventListener('click',()=>openFile(b.dataset.path)))}
 function renderSecurity(data){const s=data.summary||{};$('security-meta').textContent=(s.dependencies_checked||0)+' exact-version dependencies checked · '+(s.vulnerable_dependencies||0)+' vulnerable dependency advisories · '+(s.total||0)+' total findings';$('risk-score').textContent=s.risk_score??'—';$('critical-count').textContent=s.by_severity?.critical||0;$('high-count').textContent=s.by_severity?.high||0;$('medium-count').textContent=s.by_severity?.medium||0;$('low-count').textContent=s.by_severity?.low||0;$('security-findings').innerHTML=(data.findings||[]).map(x=>'<div class="debt-item"><div class="debt-top"><span class="sev '+esc(x.severity)+'">'+esc(x.severity)+'</span><strong>'+esc(x.title)+'</strong></div><p>'+esc(x.evidence||'')+' · '+esc(x.recommendation||'')+'</p><button class="file-row security-file" data-path="'+esc(x.path)+'">'+esc(x.path)+(x.line?':'+x.line:'')+' · '+esc(x.category)+' · '+esc(x.confidence)+'</button></div>').join('')||'<div class="empty">No findings from configured checks. This is not proof that the repository is secure.</div>';document.querySelectorAll('.security-file').forEach(b=>b.addEventListener('click',()=>openFile(b.dataset.path)));$('attack-count').textContent=(data.attack_paths||[]).length+' CANDIDATE PATHS';$('attack-paths').innerHTML=(data.attack_paths||[]).map(x=>'<div class="debt-item"><div class="debt-top"><span class="sev medium">REVIEW</span><strong>'+esc(x.source_file)+' → '+esc(x.sink_file)+'</strong></div><p>'+esc(x.path.join(' → '))+'</p><div class="path">'+esc(x.evidence)+'</div></div>').join('')||'<div class="empty">No import-connected route-to-sink candidates detected. Dynamic flows may be missed.</div>'}
 async function runSecurity(){if(!state.id)return toast('Load or scan a repository first');const b=$('security-btn');setLoading(b,true);b.textContent='Scanning…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/security/scan',{method:'POST'});renderSecurity(d);await loadSecurityHistory();toast('Security scan complete · '+d.summary.total+' findings · '+d.timeline_delta.new_count+' new')}catch(e){toast(e.message)}finally{setLoading(b,false);b.textContent='Run security scan →'}}
 async function loadSecurityHistory(){if(!state.id)return;try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/security-history');$('security-timeline').innerHTML=(d.items||[]).map(x=>'<div class="history-record"><strong>'+new Date(x.created_at*1000).toLocaleString()+'</strong><p>'+x.summary.total+' findings · '+x.summary.dependencies_checked+' dependencies checked</p><small>+'+x.delta.new_count+' new · −'+x.delta.resolved_count+' resolved · '+x.delta.unchanged_count+' unchanged</small>'+(x.delta.new.length?'<p>New: '+x.delta.new.map(n=>esc(n.title)+' ('+esc(n.path)+')').join(' · ')+'</p>':'')+(x.delta.resolved.length?'<p>Resolved: '+x.delta.resolved.map(n=>esc(n.title)+' ('+esc(n.path)+')').join(' · ')+'</p>':'')+'</div>').join('')||'<div class="empty">No security scans recorded yet.</div>'}catch(e){$('security-timeline').textContent=e.message}}
-async function investigate(){if(!state.id)return toast('Load or scan a repository first');const question=$('investigation-question').value.trim();if(question.length<5)return toast('Add a more specific investigation question');const b=$('investigate-btn');setLoading(b,true);b.textContent='Investigating…';$('investigation-result').textContent='Retrieving evidence and expanding through repository relationships…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/investigate',{method:'POST',body:JSON.stringify({question})});$('investigation-result').innerHTML='<div class="result-panel"><h3>Investigation answer</h3><p>'+esc(d.answer).replace(/\n/g,'<br>')+'</p><div class="result-meta">Provider: '+esc(d.provider)+' · Verification: '+esc(d.verification.status)+'</div><p>'+esc(d.verification.note)+'</p></div><div class="result-panel"><h3>Investigation trail</h3>'+d.steps.map(x=>'<p><b>'+esc(x.step)+'</b> — '+esc(x.detail)+'</p>').join('')+'</div><div class="evidence">'+d.evidence.map(x=>'<button class="evidence-file" data-path="'+esc(x.path)+'">'+esc(x.path)+'</button>').join('')+'</div>';wireEvidenceLinks();loadHistory()}catch(e){$('investigation-result').textContent=e.message}finally{setLoading(b,false);b.textContent='Start investigation →'}}
-async function reviewPR(){if(!state.id)return toast('Load or scan the repository first');const url=$('pr-url').value.trim();if(!url)return toast('Paste a GitHub pull request URL');const b=$('pr-btn');setLoading(b,true);b.textContent='Reviewing…';$('pr-result').textContent='Fetching pull request patches and checking dependency impact…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/pull-request/review',{method:'POST',body:JSON.stringify({url})});$('pr-result').innerHTML='<div class="result-panel"><h3>Reviewer assessment</h3><p>'+esc(d.review).replace(/\n/g,'<br>')+'</p><div class="result-meta">'+d.files.length+' changed files · '+d.security_findings.length+' static security signals · '+esc(d.provider)+'</div></div><div class="result-panel"><h3>Changed files</h3>'+d.files.map(x=>'<button class="evidence-file" data-path="'+esc(x.path)+'">'+esc(x.status)+' · '+esc(x.path)+' · +'+x.additions+' / -'+x.deletions+'</button>').join('')+'</div><p class="muted-note">'+d.limitations.map(esc).join(' · ')+'</p>';wireEvidenceLinks()}catch(e){$('pr-result').textContent=e.message}finally{setLoading(b,false);b.textContent='Review PR →'}}
+async function investigate(){if(!state.id)return toast('Load or scan a repository first');const question=$('investigation-question').value.trim();if(question.length<5)return toast('Add a more specific investigation question');const b=$('investigate-btn');setLoading(b,true);b.textContent='Investigating…';$('investigation-result').textContent='Retrieving evidence and expanding through repository relationships…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/investigate',{method:'POST',body:JSON.stringify({question})});let accHtml = d.accuracy ? renderAccuracyCard(d.accuracy) : ''; $('investigation-result').innerHTML = '<div class="result-panel"><h3>Investigation answer</h3><p>'+esc(d.answer).replace(/
+/g,'<br>')+'</p><div class="result-meta">Provider: '+esc(d.provider)+' · Verification: '+esc(d.verification.status)+'</div><p>'+esc(d.verification.note)+'</p></div>' + accHtml + '<div class="result-panel"><h3>Investigation trail</h3>'+d.steps.map(x=>'<p><b>'+esc(x.step)+'</b> — '+esc(x.detail)+'</p>').join('')+'</div><div class="evidence">'+d.evidence.map(x=>'<button class="evidence-file" data-path="'+esc(x.path)+'">'+esc(x.path)+'</button>').join('')+'</div>'; wireEvidenceLinks(); loadHistory();}catch(e){$('investigation-result').textContent=e.message}finally{setLoading(b,false);b.textContent='Start investigation →'}}
+async function reviewPR(){if(!state.id)return toast('Load or scan the repository first');const url=$('pr-url').value.trim();if(!url)return toast('Paste a GitHub pull request URL');const b=$('pr-btn');setLoading(b,true);b.textContent='Reviewing…';$('pr-result').textContent='Fetching pull request patches and checking dependency impact…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/pull-request/review',{method:'POST',body:JSON.stringify({url})});$('pr-result').innerHTML='<div class="result-panel"><h3>Reviewer assessment</h3><p>'+esc(d.review).replace(/\n/g,'<br>')+'</p><div class="result-meta">'+d.files.length+' changed files · '+d.security_findings.length+' static security signals · '+esc(d.provider)+'</div></div><div class="result-panel"><h3>Changed files</h3>'+d.files.map(x=>'<button class="evidence-file" data-path="'+esc(x.path)+'">'+esc(x.status)+' · '+esc(x.path)+' · +'+x.additions+' / -'+x.deletions+'</button>').join('')+'</div><p class="muted-note">'+d.limitations.map(esc).join(' · ')+'</p>';wireEvidenceLinks();}catch(e){$('pr-result').textContent=e.message}finally{setLoading(b,false);b.textContent='Review PR →'}}
 async function simulateChange(){if(!state.id)return toast('Load or scan the repository first');const description=$('change-description').value.trim(),diff=$('change-diff').value;if(description.length<5||diff.length<5)return toast('Add a description and a unified diff');const b=$('change-btn');setLoading(b,true);b.textContent='Simulating…';$('change-result').textContent='Analysing changed paths, dependencies and risky patterns…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/change-simulate',{method:'POST',body:JSON.stringify({description,diff})});$('change-result').innerHTML='<div class="result-panel"><h3>Preflight assessment</h3><p>'+esc(d.answer).replace(/\n/g,'<br>')+'</p><div class="result-meta">'+d.changed_paths.length+' changed paths · '+d.security_findings.length+' security pattern matches</div></div><div class="result-panel"><h3>Potentially affected modules</h3><p>'+esc(d.impact.map(x=>x.path+': '+x.count+' dependent files').join(' · ')||'No matching existing changed paths were found in the scanned snapshot.')+'</p></div><p class="muted-note">'+esc(d.disclaimer)+'</p>'}catch(e){$('change-result').textContent=e.message}finally{setLoading(b,false);b.textContent='Simulate change →'}}
 async 
 async function loadCommitHistory(){
@@ -185,7 +202,7 @@ async function exportReport(){if(!state.id)return toast('Load or scan the reposi
 async function toggleRecording(){if(state.recording){state.recorder.stop();return}if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return toast('Microphone recording is not supported in this browser');try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});const recorder=new MediaRecorder(stream);state.recorder=recorder;state.chunks=[];recorder.ondataavailable=e=>{if(e.data.size)state.chunks.push(e.data)};recorder.onstop=async()=>{stream.getTracks().forEach(t=>t.stop());state.recording=false;$('record-btn').textContent='● Record question';$('voice-status').textContent='Transcribing with Saaras v4…';try{const blob=new Blob(state.chunks,{type:recorder.mimeType||'audio/webm'});if(!blob.size)throw new Error('No audio was recorded');const form=new FormData();form.append('file',blob,'recording.webm');form.append('mode','codemix');const d=await api('/api/voice/transcribe',{method:'POST',body:form});$('question').value=d.transcript;$('voice-status').textContent='Transcript ready · '+(d.language_code||'language detected');$('question').focus()}catch(e){$('voice-status').textContent=e.message}};recorder.start();state.recording=true;$('record-btn').textContent='■ Stop recording';$('voice-status').textContent='Recording… stop within 30 seconds';setTimeout(()=>{if(state.recording)recorder.stop()},25000)}catch(e){toast('Microphone access failed: '+e.message)}}
 async function speakAnswer(){const text=$('answer').innerText.trim();if(!text)return toast('Ask a question before requesting a spoken answer');try{$('voice-status').textContent='Generating spoken answer…';const d=await api('/api/voice/speak',{method:'POST',body:JSON.stringify({text:text.slice(0,2400),language_code:$('speech-language').value})});const audio=new Audio('data:'+d.mime_type+';base64,'+d.audio_base64);await audio.play();$('voice-status').textContent='Playing Sarvam voice response · '+d.language_code}catch(e){$('voice-status').textContent=e.message}}
 
-$('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').addEventListener('click',()=>{$('repo-url').scrollIntoView({behavior:'smooth',block:'center'});$('repo-url').focus()});$('scan-btn').addEventListener('click',scan);$('security-btn').addEventListener('click',runSecurity);$('security-history-btn').addEventListener('click',loadSecurityHistory);$('investigate-btn').addEventListener('click',investigate);$('pr-btn').addEventListener('click',reviewPR);$('change-btn').addEventListener('click',simulateChange);$('history-btn').addEventListener('click',loadHistory);$('audit-btn').addEventListener('click',loadAudit);$('report-btn').addEventListener('click',exportReport);$('record-btn').addEventListener('click',toggleRecording);$('speak-btn').addEventListener('click',speakAnswer);$('ask-btn').addEventListener('click',ask);$('question').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});$('repo-url').addEventListener('keydown',e=>{if(e.key==='Enter')scan()});$('demo-btn').addEventListener('click',loadDemo);$('modal-close').addEventListener('click',()=>$('file-modal').classList.remove('open'));$('file-modal').addEventListener('click',e=>{if(e.target===$('file-modal'))$('file-modal').classList.remove('open')});
+$('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').addEventListener('click',()=>{$('repo-url').scrollIntoView({behavior:'smooth',block:'center'});$('repo-url').focus()});$('scan-btn').addEventListener('click',scan);$('security-btn').addEventListener('click',runSecurity);$('security-history-btn').addEventListener('click',loadSecurityHistory);$('investigate-btn').addEventListener('click',investigate);$('pr-btn').addEventListener('click',reviewPR);$('change-btn').addEventListener('click',simulateChange);$('run-impact-btn')?.addEventListener('click',runImpactAnalysis);$('history-btn').addEventListener('click',loadHistory);$('audit-btn').addEventListener('click',loadAudit);$('report-btn').addEventListener('click',exportReport);$('record-btn').addEventListener('click',toggleRecording);$('speak-btn').addEventListener('click',speakAnswer);$('ask-btn').addEventListener('click',ask);$('question').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});$('repo-url').addEventListener('keydown',e=>{if(e.key==='Enter')scan()});$('demo-btn').addEventListener('click',loadDemo);$('modal-close').addEventListener('click',()=>$('file-modal').classList.remove('open'));$('file-modal').addEventListener('click',e=>{if(e.target===$('file-modal'))$('file-modal').classList.remove('open')});
 
 // CODEWHY workspace navigation: render one focused workspace at a time.
 (function setupWorkspaceTabs(){
@@ -211,9 +228,10 @@ $('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').
     pr:[$('pr-section')],
     change:[$('change-section')],
     history:[$('history-section')],
-    commits:[commitSection]
+    commits:[commitSection],
+    'impact-analyzer':[$('impact-analyzer-section')]
   };
-  const all=[hero,connect,stats,layout,$('ask-card'),$('security-section'),$('investigate-section'),$('pr-section'),$('change-section'),$('history-section'),commitSection,githubReposCard,...overviewOnly].filter(Boolean);
+  const all=[hero,connect,stats,layout,$('ask-card'),$('security-section'),$('investigate-section'),$('pr-section'),$('change-section'),$('history-section'),commitSection,$('impact-analyzer-section'),githubReposCard,...overviewOnly].filter(Boolean);
   function activate(name){
     all.forEach(node=>node.style.display='none');
     if(rightcol)rightcol.style.display='none';
@@ -244,7 +262,7 @@ $('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').
       if(active)button.setAttribute('aria-current','page');
       else button.removeAttribute('aria-current');
     });
-    const labels={overview:'OVERVIEW',graph:'CODE GRAPH',debt:'TECHNICAL DEBT',ask:'ASK CODEWHY',security:'SECURITY CENTER',investigate:'AUTONOMOUS INVESTIGATOR',pr:'PR RISK REVIEWER',change:'CHANGE SIMULATOR',history:'HISTORY & REPORTS',commits:'COMMIT HISTORY'};
+    const labels={overview:'OVERVIEW',graph:'CODE GRAPH',debt:'TECHNICAL DEBT',ask:'ASK CODEWHY',security:'SECURITY CENTER',investigate:'AUTONOMOUS INVESTIGATOR',pr:'PR RISK REVIEWER',change:'CHANGE SIMULATOR',history:'HISTORY & REPORTS',commits:'COMMIT HISTORY','impact-analyzer':'IMPACT ANALYZER'};
     const crumb=document.querySelector('.crumb span');
     if(crumb)crumb.textContent=labels[name]||'OVERVIEW';
     if(name==='ask')$('question')?.focus();
@@ -263,4 +281,93 @@ $('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').
 
 (async()=>{try{const auth=await api('/api/auth/status');state.csrf=auth.csrf_token||'';if(auth.oauth_configured){$('auth-action').style.display='inline-block';$('auth-action').textContent=auth.authenticated?'Sign out':'Sign in with GitHub';$('auth-action').onclick=async()=>{if(auth.authenticated){await api('/api/auth/logout',{method:'POST'});location.reload()}else location.href='/api/auth/github'}}if(auth.authenticated){state.authenticated=true;$('avatar').textContent=(auth.user.login||'U').slice(0,1).toUpperCase();$('mode-pill').textContent=auth.user.role.toUpperCase()+' WORKSPACE';state.role=auth.user.role;if(auth.user.role==='admin')$('audit-btn').style.display='inline-block'}if(auth.auth_required&&!auth.authenticated){document.querySelector('.main').innerHTML='<div style="max-width:620px;margin:15vh auto;text-align:center"><div class="eyebrow">SECURE WORKSPACE</div><h1>Sign in to CODEWHY</h1><p style="color:var(--muted);line-height:1.7">Authenticate with GitHub to access your repositories, investigations and security reports.</p><a class="btn primary" style="display:inline-block;text-decoration:none;margin-top:16px" href="/api/auth/github">Continue with GitHub →</a></div>';return}const h=await api('/api/health');$('sys-status').textContent='Sarvam '+(h.sarvam_configured?'connected':'needs API key')+' · Neo4j '+(h.neo4j_connected?'connected':'memory mode');if(auth.authenticated){await loadGitHubRepos()}else{await loadDemo()}await loadHistory();await loadSecurityHistory()}catch(e){$('sys-status').textContent='API connection unavailable';toast(e.message)}})();
 window.addEventListener('resize',()=>{if(state.graph)renderGraph(state.graph)});
+
+function renderAccuracyCard(acc) {
+  if (!acc) return "";
+  const badgeClass = acc.confidence_score >= 80 ? "low" : acc.confidence_score >= 55 ? "medium" : "high";
+  return `
+    <div class="result-panel" style="margin-top:14px;border:1px solid #283e35;background:#0d1815">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="color:var(--lime);margin:0">AI Accuracy & Evidence Evaluation (Feature 4.1)</h3>
+        <span class="sev ${badgeClass}">${acc.confidence_score}% CONFIDENCE (${acc.verdict})</span>
+      </div>
+      <p style="color:#a8b6c8;font-size:11px">${esc(acc.summary)}</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div style="background:#111a19;padding:10px;border-radius:6px">
+          <strong style="color:var(--lime);font-size:11px">✓ Supported Claims (${acc.supported_claims.length})</strong>
+          <ul style="margin:5px 0 0 16px;padding:0;font-size:10px;color:#c9d4e4">
+            ${acc.supported_claims.slice(0,3).map(c=>`<li>${esc(c.statement.slice(0,80))}… <span style="color:var(--cyan)">(${esc(c.evidence)})</span></li>`).join('')||'<li>General synthesis verified.</li>'}
+          </ul>
+        </div>
+        <div style="background:#201416;padding:10px;border-radius:6px">
+          <strong style="color:var(--red);font-size:11px">⚠ Hallucinations / Flags (${acc.hallucinations.length + acc.unsupported_claims.length})</strong>
+          <ul style="margin:5px 0 0 16px;padding:0;font-size:10px;color:#d8a4a8">
+            ${[...acc.hallucinations, ...acc.unsupported_claims].slice(0,3).map(c=>`<li>${esc(c.statement.slice(0,80))}… (${esc(c.evidence)})</li>`).join('')||'<li>Zero hallucinations detected.</li>'}
+          </ul>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function runImpactAnalysis() {
+  if (!state.id) return toast("Load or scan a repository first");
+  const description = $("impact-desc").value.trim();
+  const diff = $("impact-diff").value.trim();
+  if (diff.length < 10) return toast("Paste a unified git diff first");
+  
+  const btn = $("run-impact-btn");
+  setLoading(btn, true);
+  btn.textContent = "Tracing blast radius…";
+  const out = $("impact-analysis-result");
+  out.style.display = "block";
+  out.innerHTML = '<div class="empty">Evaluating AST signatures and querying graph dependencies…</div>';
+  
+  try {
+    const data = await api("/api/repos/" + encodeURIComponent(state.id) + "/impact/analyze", {
+      method: "POST",
+      body: JSON.stringify({ description, diff })
+    });
+    
+    const blast = data.blast_radius;
+    out.innerHTML = `
+      <div class="result-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">Blast Radius Assessment: <span style="color:var(--lime)">${blast.level} IMPACT</span></h3>
+          <span class="sev ${data.risk_level === 'HIGH' ? 'high' : 'low'}">${data.risk_level} RISK</span>
+        </div>
+        <p style="margin:6px 0 10px;color:var(--muted)">${data.changed_files_count} modified file(s) ripple to <strong>${blast.affected_count} dependent module(s)</strong> (${blast.blast_score}% repo coverage).</p>
+        <div style="font:11px var(--mono);color:var(--cyan);background:#090e15;padding:8px;border-radius:6px">
+          Direct: ${blast.direct_dependents.join(', ') || 'None (Isolated module)'}
+        </div>
+      </div>
+
+      ${data.breaking_changes.length ? `
+      <div class="result-panel" style="border-color:#5c242b;background:#1e1014">
+        <h3 style="color:var(--red);margin:0 0 6px">🚨 Breaking Changes Detected</h3>
+        <ul style="margin:0 0 0 18px;padding:0;font-size:11px;color:#fca5a5">
+          ${data.breaking_changes.map(b=>`<li>${esc(b)}</li>`).join('')}
+        </ul>
+      </div>` : ''}
+
+      <div class="result-panel">
+        <h3>Staff Architect AI Explanation</h3>
+        <p style="white-space:pre-wrap;line-height:1.6;font-size:12px">${esc(data.ai_explanation)}</p>
+      </div>
+
+      <div class="result-panel">
+        <h3>Pre-Merge Test Recommendations</h3>
+        <ul style="margin:0 0 0 18px;padding:0;font-size:11px;color:#94a3b8">
+          ${data.recommendations.map(r=>`<li>${esc(r)}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  } catch(e) {
+    out.innerHTML = `<div class="empty" style="color:var(--red)">${esc(e.message)}</div>`;
+  } finally {
+    setLoading(btn, false);
+    btn.textContent = "Analyze Blast Radius & Risks →";
+  }
+}
+
 </script></body></html>

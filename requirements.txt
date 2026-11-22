@@ -1,9 +1,21 @@
-fastapi>=0.115,<1.0
-uvicorn[standard]>=0.30,<1.0
-httpx>=0.27,<1.0
-neo4j>=5.26,<7.0
-pydantic>=2.8,<3.0
-python-dotenv>=1.0,<2.0
-cryptography>=43,<47
-python-multipart>=0.0.9,<1.0
-pytest>=8,<9
+# --- Core Web & Server ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+httpx>=0.28.0
+python-multipart>=0.0.18
+python-dotenv>=1.0.1
+
+# --- Graph Database ---
+neo4j>=5.27.0,<7.0.0
+
+# --- Validation & Security ---
+pydantic>=2.10.0,<3.0.0
+cryptography>=44.0.0      # Compatible with modern 48.x releases
+
+# --- Features 4.1 & 4.2 (AI Accuracy & Change Impact) ---
+unidiff>=0.7.5            # Git diff parser (Added/modified/deleted hunks)
+deepdiff>=8.1.0           # Code AST & function signature breaking changes
+GitPython>=3.1.44         # Git commit history, branch comparison & blame
+
+# --- Testing ---
+pytest>=8.3.0

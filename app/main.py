@@ -22,6 +22,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.security import redact_source, security_report, scan_source
+from app.accuracy import evaluate_accuracy
+from app.impact import analyze_change_impact
 from app.auth import (AUTH_REQUIRED, CSRF_COOKIE, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI, SESSION_COOKIE, audit, audit_list, create_session, delete_session, get_session, init_auth_db, load_investigations, load_security_scans, oauth_ready, save_investigation, save_security_scan, valid_csrf)
 
 try:
@@ -345,6 +347,15 @@ class PullRequestReviewRequest(BaseModel):
 class SpeechSynthesisRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2500)
     language_code: str = Field(default="en-IN", max_length=12)
+class AccuracyEvaluationRequest(BaseModel):
+    question: str = Field(min_length=2, max_length=2000)
+    answer: str = Field(min_length=5, max_length=20000)
+
+class AdvancedChangeImpactRequest(BaseModel):
+    description: str = Field(min_length=5, max_length=2000)
+    diff: str = Field(min_length=10, max_length=100000)
+    pr_url: str | None = None
+
 
 @app.middleware("http")
 async def auth_and_tenant_middleware(request: Request, call_next):
@@ -611,7 +622,8 @@ async def ask(repo_id: str, req: AskRequest):
         context += "\nRELATED SECURITY FINDINGS:\n" + json.dumps([item for item in security_data["findings"] if item.get("path") in {e["path"] for e in evidence} or item.get("category") == "dependency"][:25])
         context += "\nPOTENTIAL ATTACK PATH CANDIDATES:\n" + json.dumps([item for item in security_data.get("attack_paths", []) if item.get("source_file") in {e["path"] for e in evidence} or item.get("sink_file") in {e["path"] for e in evidence}][:10])
     answer, provider = await sarvam_answer(req.question, context)
-    return {"answer": answer, "provider": provider, "evidence": [{"path": e["path"], "lines": e["lines"], "relevance": e["relevance"]} for e in evidence], "disclaimer": "Answers are grounded in the retrieved source excerpts. Static analysis can miss dynamic behaviour and external context."}
+    accuracy_rep = evaluate_accuracy(req.question, answer, graph)
+    return {"answer": answer, "provider": provider, "evidence": [{"path": e["path"], "lines": e["lines"], "relevance": e["relevance"]} for e in evidence], "disclaimer": "Answers are grounded in the retrieved source excerpts. Static analysis can miss dynamic behaviour and external context.", "accuracy": accuracy_rep}
 
 @app.get("/api/repos/{repo_id:path}/commits")
 async def get_repository_commits(repo_id: str, request: Request, limit: int = 40):
@@ -877,14 +889,16 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
         {"step": "Evidence synthesis", "detail": "Asked the configured language model to distinguish observed code from inferred intent."}
     ]
     answer, provider = await sarvam_answer(req.question, context)
+    accuracy_report = evaluate_accuracy(req.question, answer, graph, commits=history_context)
     cited = [e["path"] for e in evidence if e["path"] in answer]
     verification = {
         "status": "evidence_referenced" if cited else "needs_review",
         "cited_files": cited,
         "retrieved_files": [e["path"] for e in evidence],
-        "note": "This is a traceability check, not proof that every natural-language claim is true. Review the cited source before relying on the conclusion."
+        "accuracy": accuracy_report,
+        "note": "This is a traceability check backed by Feature 4.1 accuracy evaluation."
     }
-    record = {"id": hashlib.sha256(f"{repo_id}:{time.time_ns()}:{req.question}".encode()).hexdigest()[:16], "question": redact_source(req.question), "answer": answer, "provider": provider, "evidence": evidence, "steps": steps, "verification": verification, "created_at": int(time.time())}
+    record = {"id": hashlib.sha256(f"{repo_id}:{time.time_ns()}:{req.question}".encode()).hexdigest()[:16], "question": redact_source(req.question), "answer": answer, "provider": provider, "evidence": evidence, "steps": steps, "verification": verification, "accuracy": accuracy_report, "created_at": int(time.time())}
     user = getattr(request.state, "user", None)
     save_investigation(repo_id, user.get("id") if user else None, record)
     audit(user, "investigation.run", repo_id, redact_source(req.question)[:160])
@@ -972,6 +986,40 @@ async def review_pull_request(repo_id: str, req: PullRequestReviewRequest, reque
     answer, provider = await sarvam_answer("Act as a cautious senior security-minded code reviewer. Review this pull request for correctness, regressions, security, dependency and test risks. Prioritise actionable findings and cite changed file paths. Do not claim tests ran.", context)
     audit(getattr(request.state, "user", None), "pull_request.review", repo_id, req.url)
     return {"pull_request": req.url, "files": changed, "impact": impacts, "security_findings": findings, "review": answer, "provider": provider, "limitations": ["GitHub omits patch text for some large or binary files.", "Only the returned PR file patches are analysed.", "No tests are executed and no merge decision is made automatically."]}
+
+
+@app.post("/api/repos/{repo_id:path}/accuracy/evaluate")
+async def evaluate_answer_accuracy(repo_id: str, req: AccuracyEvaluationRequest):
+    graph = REPOS.get(repo_id)
+    if not graph:
+        raise HTTPException(404, "Repository not found. Scan it first.")
+    report = evaluate_accuracy(req.question, req.answer, graph)
+    return report
+
+@app.post("/api/repos/{repo_id:path}/impact/analyze")
+async def run_change_impact_analysis(repo_id: str, req: AdvancedChangeImpactRequest, request: Request):
+    graph = REPOS.get(repo_id)
+    if not graph:
+        raise HTTPException(404, "Repository not found. Scan it first.")
+    if len(req.diff.strip()) < 10:
+        raise HTTPException(400, "Please provide a valid unified git diff.")
+    analysis = analyze_change_impact(req.description, req.diff, graph)
+    context = (
+        f"CHANGE DESCRIPTION: {req.description}\n"
+        f"AFFECTED BLAST RADIUS: {analysis['blast_radius']['affected_count']} files ({analysis['blast_radius']['level']})\n"
+        f"BREAKING CHANGES: {json.dumps(analysis['breaking_changes'])}\n"
+        f"DIFF SNIPPET:\n{req.diff[:8000]}"
+    )
+    prompt = (
+        "You are CODEWHY staff architect. Review this proposed change impact. "
+        "Explain concisely: 1) What changes 2) Potential side-effects on dependents 3) Verification checklist before merge."
+    )
+    ai_narrative, provider = await sarvam_answer(prompt, context)
+    analysis["ai_explanation"] = ai_narrative
+    analysis["provider"] = provider
+    user = getattr(request.state, "user", None)
+    audit(user, "impact.analyze", repo_id, f"Risk: {analysis['risk_level']}")
+    return analysis
 
 @app.get("/api/repos/{repo_id:path}/file")
 async def get_file(repo_id: str, path: str):
