@@ -67,3 +67,33 @@ def test_graph_view_returns_all_nodes_and_relationships():
     view = graph_view(graph)
     assert len(view["nodes"]) == len(graph["nodes"])
     assert len(view["edges"]) == len(graph["edges"])
+
+
+def test_architecture_graph_includes_repository_files_symbols_and_all_relationships():
+    from app.main import graph_view
+
+    graph = build_graph(
+        "owner/project",
+        {
+            "main.py": "from helpers import run\\nclass App:\\n    pass\\ndef main():\\n    return run()\\n",
+            "helpers.py": "def run():\\n    return True\\n",
+        },
+        {"full_name": "owner/project"},
+    )
+    view = graph_view(graph)
+    nodes_by_type = {}
+    for node in view["nodes"]:
+        nodes_by_type.setdefault(node["type"], set()).add(node["id"])
+
+    assert nodes_by_type["repository"] == {"owner/project"}
+    assert len(nodes_by_type["file"]) == 2
+    assert "function" in nodes_by_type
+    assert "class" in nodes_by_type
+    assert all(
+        {"source", "target", "type"} <= edge.keys()
+        for edge in view["edges"]
+    )
+    assert sum(edge["type"] == "CONTAINS" for edge in view["edges"]) == 2
+    assert sum(edge["type"] == "DEFINES" for edge in view["edges"]) >= 2
+    assert view["stats"]["nodes"] == len(view["nodes"])
+    assert view["stats"]["relationships"] == len(view["edges"])
