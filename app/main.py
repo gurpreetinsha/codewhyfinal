@@ -1835,12 +1835,13 @@ async def ensure_sentinel_graph(repo_id: str) -> dict[str, Any]:
         graph,
         security_data
     )
-    SENTINEL_GRAPHS[repo_id] = sentinel_graph
     if driver:
         try:
             persist_sentinel_graph(driver, NEO4J_DATABASE, sentinel_graph)
         except Exception as exc:
-            print(f"[CODEWHY SENTINEL] Neo4j graph persistence warning: {exc}")
+            print(f"[CODEWHY SENTINEL] Neo4j graph persistence failed: {exc}")
+            raise HTTPException(503, "Sentinel graph could not be synchronized with Neo4j.") from exc
+    SENTINEL_GRAPHS[repo_id] = sentinel_graph
     return sentinel_graph
 
 
