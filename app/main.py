@@ -1132,7 +1132,7 @@ async def admin_update_incident(incident_id: str, req: IncidentUpdateRequest, re
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "sarvam_configured": bool(SARVAM_API_KEY), "neo4j_connected": bool(driver), "auth_required": AUTH_REQUIRED, "oauth_configured": oauth_ready()}
+    return {"status": "ok", "sarvam_configured": bool(current_sarvam_api_key()), "neo4j_connected": bool(driver), "auth_required": AUTH_REQUIRED, "oauth_configured": oauth_ready()}
 
 @app.get("/api/demo")
 async def demo(request: Request):
