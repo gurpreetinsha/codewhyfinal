@@ -102,6 +102,65 @@
     </div>
   </div>
 
+  <div class="card" id="sentinel-code-helper" style="margin-bottom:14px;border-color:#345047">
+    <div class="card-head">
+      <div>
+        <h2>Code Helper · Review, improve & commit</h2>
+        <small>FILE REVIEW · AI FIX SUGGESTIONS · USER-APPROVED GITHUB COMMIT</small>
+      </div>
+      <span class="pill" style="color:var(--lime)">SAFE BRANCH WORKFLOW</span>
+    </div>
+    <div class="feature-body">
+      <p class="muted-note" style="margin-top:0">Choose a file from the repository you scanned. Sentinel checks it for bugs and risky patterns, explains what should improve, and prepares a complete replacement. Review the diff before committing; commits go to a new branch, never straight to the default branch.</p>
+      <div style="display:grid;grid-template-columns:minmax(180px,1fr) minmax(180px,2fr);gap:10px;margin-bottom:10px">
+        <label style="font-size:11px;color:var(--muted)">SOURCE FILE
+          <select id="sentinel-code-file" style="display:block;width:100%;margin-top:5px;background:#0d1219;color:var(--text);border:1px solid #354759;border-radius:8px;padding:10px"></select>
+        </label>
+        <label style="font-size:11px;color:var(--muted)">REVIEW FOCUS
+          <input id="sentinel-code-focus" value="Find bugs, edge cases, security issues and opportunities to improve code quality." style="display:block;width:100%;margin-top:5px" maxlength="1500">
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn primary" id="sentinel-code-review-btn">Review selected file →</button>
+        <button class="btn" id="sentinel-code-refresh-btn">Refresh file list</button>
+        <span class="muted-note" id="sentinel-code-status" aria-live="polite">Scan a repository to choose a file.</span>
+      </div>
+      <div id="sentinel-code-review" style="display:none;margin-top:14px">
+        <div class="result-panel">
+          <h3>Review findings & explanation</h3>
+          <div id="sentinel-code-review-text" style="font-size:12px;line-height:1.7"></div>
+        </div>
+        <div class="result-panel" style="margin-top:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+            <h3 style="margin:0">Proposed replacement</h3>
+            <span class="muted-note" id="sentinel-code-diff-summary"></span>
+          </div>
+          <p class="muted-note">You can edit the generated code before committing it.</p>
+          <textarea id="sentinel-code-replacement" rows="18" spellcheck="false" style="width:100%;font:11px/1.55 var(--mono);white-space:pre;tab-size:4"></textarea>
+          <details style="margin-top:10px">
+            <summary style="cursor:pointer;color:var(--cyan);font:11px var(--mono)">View proposed diff</summary>
+            <pre id="sentinel-code-diff" class="code" style="max-height:420px;overflow:auto;white-space:pre-wrap;font:11px/1.55 var(--mono)"></pre>
+          </details>
+        </div>
+        <div class="result-panel" style="margin-top:10px">
+          <h3>Commit reviewed fix</h3>
+          <label style="display:block;font-size:11px;color:var(--muted);margin:8px 0">COMMIT MESSAGE
+            <input id="sentinel-code-commit-message" value="Improve source code based on Sentinel review" maxlength="200" style="display:block;width:100%;margin-top:5px">
+          </label>
+          <label style="display:block;font-size:11px;color:var(--muted);margin:8px 0">NEW BRANCH
+            <input id="sentinel-code-branch" maxlength="200" style="display:block;width:100%;margin-top:5px">
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--muted);margin:12px 0">
+            <input type="checkbox" id="sentinel-code-confirm" style="accent-color:var(--lime);margin-top:2px">
+            I reviewed the replacement and diff, and I understand this will create a commit on a new GitHub branch.
+          </label>
+          <button class="btn primary" id="sentinel-code-commit-btn" disabled>Commit approved fix to new branch →</button>
+          <span id="sentinel-code-commit-status" class="muted-note" style="display:block;margin-top:8px" aria-live="polite"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="card" style="margin-bottom:14px">
     <div class="card-head">
       <h2>Security Investigation Workspace</h2>
