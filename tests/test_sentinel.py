@@ -81,6 +81,8 @@ def test_sentinel_graph_construction_and_node_types():
     assert "DEFINES" in edge_types
     assert "DEPENDS_ON" in edge_types
     assert "CONTAINS" in edge_types
+    dependency_edge = next(edge for edge in sentinel_graph["edges"] if edge["type"] == "DEPENDS_ON")
+    assert dependency_edge["source"] == "test::repo"
 
 
 def test_sentinel_graph_persistence_writes_all_nodes_and_relationships_atomically():
