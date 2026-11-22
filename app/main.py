@@ -2359,6 +2359,10 @@ class SarvamKeyRequest(BaseModel):
 async def account_page():
     return FileResponse(str(STATIC_DIR / "account.html"))
 
+@app.get("/api/account/plans")
+async def account_plan_catalog():
+    return {"plans": PLANS, "billing_mode": "demo"}
+
 @app.get("/api/account/overview")
 async def account_overview(request: Request):
     user = getattr(request.state, "user", None)
