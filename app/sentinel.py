@@ -248,7 +248,7 @@ def build_sentinel_graph(repo_id: str, files: dict[str, str], base_graph: dict[s
                 })
                 existing_node_ids.add(dep_id)
 
-            repo_node_id = f"repo:{repo_id}"
+            repo_node_id = repo_id
             edge_key = (repo_node_id, dep_id, "DEPENDS_ON")
             if edge_key not in existing_edges:
                 edges.append({
@@ -382,91 +382,105 @@ def build_sentinel_graph(repo_id: str, files: dict[str, str], base_graph: dict[s
     }
 
 
+_SENTINEL_NODE_LABELS = {
+    "file": "File",
+    "function": "Function",
+    "class": "CodeClass",
+    "api": "API",
+    "dependency": "Dependency",
+    "security_finding": "SecurityFinding",
+    "vulnerability": "Vulnerability",
+    "technical_decision": "TechnicalDecision",
+}
+
+_SENTINEL_RELATIONSHIP_TYPES = frozenset({
+    "CONTAINS", "DEFINES", "IMPORTS", "CALLS", "DEPENDS_ON",
+    "MODIFIES", "AFFECTS", "INTRODUCES", "FIXES", "REVIEWED_IN", "RELATED_TO",
+})
+
+
 def persist_sentinel_graph(driver: Any, database: str, graph: dict[str, Any]) -> None:
-    """Store complete Sentinel graph schema into Neo4j using parameterized, idempotent queries."""
+    """Atomically replace one repository's Sentinel subgraph in Neo4j.
+
+    All entities and edges are written from the exact graph returned to the
+    website. Repository-scoped IDs and a scoped cleanup prevent stale nodes
+    and cross-repository relationship matches.
+    """
     if not driver:
         return
-    repo_id = graph["id"]
 
-    try:
-        # Merge Repository
-        driver.execute_query(
-            "MERGE (r:Repository {id:$id}) SET r.name=$name, r.scanned_at=$scanned_at",
+    repo_id = graph["id"]
+    prefixes = [
+        f"{kind}:{repo_id}:"
+        for kind in ("file", "fn", "class", "api", "dep", "finding", "vuln", "dec")
+    ]
+    nodes_by_type: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for node in graph.get("nodes", []):
+        node_type = node.get("type")
+        if node_type == "repository":
+            continue
+        if node_type not in _SENTINEL_NODE_LABELS:
+            raise ValueError(f"Unsupported Sentinel graph node type: {node_type!r}")
+        props = {
+            key: value for key, value in node.items()
+            if key not in {"id", "type"} and value is not None
+        }
+        # Bloom and other graph clients can consistently use either property.
+        props.setdefault("label", node.get("label", node.get("name", node["id"])))
+        props.setdefault("name", node.get("label", node.get("name", node["id"])))
+        nodes_by_type[node_type].append({"id": node["id"], "properties": props})
+
+    edges_by_type: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for edge in graph.get("edges", []):
+        edge_type = edge.get("type")
+        if edge_type not in _SENTINEL_RELATIONSHIP_TYPES:
+            raise ValueError(f"Unsupported Sentinel relationship type: {edge_type!r}")
+        edges_by_type[edge_type].append({
+            "source": edge["source"],
+            "target": edge["target"],
+        })
+
+    def write(tx: Any) -> None:
+        # Remove stale entities from this repository only. The Repository root
+        # is retained and all its outgoing relationships are recreated below.
+        tx.run(
+            "MATCH (n) WHERE n.id IS NOT NULL "
+            "AND any(prefix IN $prefixes WHERE n.id STARTS WITH prefix) "
+            "DETACH DELETE n",
+            prefixes=prefixes,
+        )
+        tx.run(
+            "MERGE (r:Repository {id:$id}) "
+            "SET r.name=$name, r.scanned_at=$scanned_at, r.metadata=$metadata",
             id=repo_id,
             name=graph.get("metadata", {}).get("full_name", repo_id),
             scanned_at=graph.get("scanned_at", int(time.time())),
-            database_=database
+            metadata=json.dumps(graph.get("metadata", {})),
         )
 
-        # Merge Nodes
-        for node in graph.get("nodes", []):
-            ntype = node.get("type")
-            if ntype == "file":
-                driver.execute_query(
-                    "MATCH (r:Repository {id:$repo}) MERGE (f:File {id:$id}) "
-                    "SET f.path=$path, f.label=$label, f.language=$language, f.lines=$lines "
-                    "MERGE (r)-[:CONTAINS]->(f)",
-                    repo=repo_id, id=node["id"], path=node["path"], label=node["label"],
-                    language=node.get("language", "text"), lines=node.get("lines", 0),
-                    database_=database
-                )
-            elif ntype == "function":
-                driver.execute_query(
-                    "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(f:File {path:$path}) "
-                    "MERGE (fn:Function {id:$id}) SET fn.name=$name, fn.path=$path, fn.line=$line "
-                    "MERGE (f)-[:DEFINES]->(fn)",
-                    repo=repo_id, path=node["path"], id=node["id"], name=node["label"], line=node.get("line", 0),
-                    database_=database
-                )
-            elif ntype == "api":
-                driver.execute_query(
-                    "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(f:File {path:$path}) "
-                    "MERGE (a:API {id:$id}) SET a.method=$method, a.endpoint=$endpoint, a.line=$line, a.handler=$handler "
-                    "MERGE (f)-[:DEFINES]->(a)",
-                    repo=repo_id, path=node["path"], id=node["id"], method=node.get("method", "GET"),
-                    endpoint=node.get("endpoint", "/"), line=node.get("line", 0), handler=node.get("handler", ""),
-                    database_=database
-                )
-            elif ntype == "dependency":
-                driver.execute_query(
-                    "MATCH (r:Repository {id:$repo}) MERGE (d:Dependency {id:$id}) "
-                    "SET d.name=$name, d.version=$version, d.ecosystem=$ecosystem, d.manifest=$manifest "
-                    "MERGE (r)-[:DEPENDS_ON]->(d)",
-                    repo=repo_id, id=node["id"], name=node.get("name", ""), version=node.get("version", ""),
-                    ecosystem=node.get("ecosystem", ""), manifest=node.get("manifest", ""),
-                    database_=database
-                )
-            elif ntype == "security_finding":
-                driver.execute_query(
-                    "MATCH (r:Repository {id:$repo})-[:CONTAINS]->(f:File {path:$path}) "
-                    "MERGE (s:SecurityFinding {id:$id}) "
-                    "SET s.title=$title, s.category=$category, s.severity=$severity, s.line=$line, s.recommendation=$recommendation "
-                    "MERGE (f)-[:CONTAINS]->(s)",
-                    repo=repo_id, path=node.get("path", ""), id=node["id"], title=node.get("title", ""),
-                    category=node.get("category", ""), severity=node.get("severity", "medium"),
-                    line=node.get("line", 0) or 0, recommendation=node.get("recommendation", ""),
-                    database_=database
-                )
-            elif ntype == "vulnerability":
-                driver.execute_query(
-                    "MERGE (v:Vulnerability {id:$id}) "
-                    "SET v.vuln_id=$vuln_id, v.package=$package, v.severity=$severity, v.summary=$summary",
-                    id=node["id"], vuln_id=node.get("vuln_id", ""), package=node.get("package", ""),
-                    severity=node.get("severity", "medium"), summary=node.get("summary", ""),
-                    database_=database
-                )
+        for node_type, label in _SENTINEL_NODE_LABELS.items():
+            batch = nodes_by_type.get(node_type, [])
+            if not batch:
+                continue
+            # Labels come only from the fixed allow-list above; all data values
+            # remain parameterized.
+            tx.run(
+                f"UNWIND $nodes AS item "
+                f"MERGE (n:{label} {{id:item.id}}) "
+                "SET n += item.properties",
+                nodes=batch,
+            )
 
-        # Merge Edges
-        for edge in graph.get("edges", []):
-            etype = edge["type"]
-            if etype in {"IMPORTS", "CALLS", "AFFECTS", "INTRODUCES", "RELATED_TO"}:
-                driver.execute_query(
-                    f"MATCH (a {{id:$source}}), (b {{id:$target}}) MERGE (a)-[:{etype}]->(b)",
-                    source=edge["source"], target=edge["target"], database_=database
-                )
-    except Exception as exc:
-        print(f"[CODEWHY SENTINEL] Neo4j graph persistence encountered: {exc}")
+        for edge_type, batch in edges_by_type.items():
+            tx.run(
+                f"UNWIND $edges AS item "
+                "MATCH (a {id:item.source}), (b {id:item.target}) "
+                f"MERGE (a)-[:{edge_type}]->(b)",
+                edges=batch,
+            )
 
+    with driver.session(database=database) as session:
+        session.execute_write(write)
 
 def query_neo4j_sentinel_context(driver: Any, database: str, repo_id: str, paths: set[str], terms: list[str]) -> list[dict[str, Any]]:
     """Query Neo4j knowledge graph for security entities connected to the specified paths and terms."""
