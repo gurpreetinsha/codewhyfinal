@@ -55,9 +55,8 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(PayloadGuardMiddleware, max_json_bytes=2 * 1024 * 1024, max_upload_bytes=15 * 1024 * 1024)
 app.add_middleware(RateLimiterMiddleware, heavy_limit=10, standard_limit=60, window_seconds=60)
 
-origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "").split(",") if x.strip()]
-if origins:
-    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
+from app.middleware import configure_cors_security
+configure_cors_security(app)
 
 driver = None
 if NEO4J_URI and NEO4J_PASSWORD and GraphDatabase:
@@ -371,17 +370,7 @@ class AdvancedChangeImpactRequest(BaseModel):
 @app.middleware("http")
 async def auth_and_tenant_middleware(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api/") and path not in {"/api/health", "/api/auth/status"}:
-        client_ip = request.client.host if request.client else "unknown"
-        expensive = any(x in path for x in ("/scan", "/investigate", "/change-simulate", "/pull-request/review", "/voice/"))
-        limit = 8 if expensive else 120
-        key = client_ip + ":" + ("expensive" if expensive else "general")
-        now = time.time()
-        RATE_BUCKETS[key] = [stamp for stamp in RATE_BUCKETS[key] if now - stamp < 60]
-        if len(RATE_BUCKETS[key]) >= limit:
-            from fastapi.responses import JSONResponse
-            return JSONResponse({"detail": "Rate limit exceeded. Please wait before retrying."}, status_code=429, headers={"Retry-After": "60"})
-        RATE_BUCKETS[key].append(now)
+    # Note: Rate limiting is handled by RateLimiterMiddleware (RFC 6585)
     sid = request.cookies.get(SESSION_COOKIE, "")
     user = get_session(sid) if sid else None
     anon_id = request.cookies.get("codewhy_anon", "") or secrets.token_urlsafe(18)
@@ -644,7 +633,7 @@ async def get_repository_commits(repo_id: str, request: Request, limit: int = 40
         raise HTTPException(404, "Repository workspace not found. Scan the repository again.")
 
     full_name = graph["metadata"].get("full_name", "")
-    if "/" not in full_name:
+    if graph["metadata"].get("demo") or "/" not in full_name:
         return {
             "repository": full_name or "demo workspace",
             "commits": [],

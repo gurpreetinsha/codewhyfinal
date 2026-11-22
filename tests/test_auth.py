@@ -85,7 +85,7 @@ def test_github_repo_listing_requires_session_and_returns_minimal_repo_data(monk
     denied = client.get("/api/github/repos")
     assert denied.status_code == 401
 
-    async def fake_get(url, **kwargs):
+    async def fake_get(*args, **kwargs):
         class Response:
             status_code = 200
             def json(self):
