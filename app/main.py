@@ -558,7 +558,7 @@ async def github_repositories(request: Request, page: int = 1, per_page: int = 1
     }
     async with httpx.AsyncClient(timeout=25, headers=headers) as client:
         response = await client.get(
-            "https://api.github.com/user/repos",
+            url="https://api.github.com/user/repos",
             params={"visibility": "all", "affiliation": "owner,collaborator,organization_member",
                     "sort": "updated", "per_page": per_page, "page": page},
         )
