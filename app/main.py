@@ -8,6 +8,7 @@ import re
 import time
 import secrets
 import hmac
+from contextvars import ContextVar
 from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -33,7 +34,7 @@ from app.auth import (
     update_sentinel_finding_status, get_sentinel_finding_statuses, delete_sentinel_investigation,
     list_users, get_user, update_user_role, update_user_status, disconnect_user
 )
-from app.sentinel import (
+from app.monetization import (\n    PLANS, init_monetization_db, get_subscription, set_demo_plan, record_ai_usage,\n    get_sarvam_key, sarvam_key_status, save_sarvam_key, delete_sarvam_key\n)\nfrom app.sentinel import (
     SUPPORTED_LANGUAGES, build_sentinel_graph, persist_sentinel_graph,
     query_neo4j_sentinel_context, identify_security_sensitive_components,
     reconstruct_defensive_attack_paths, understand_multilingual_security_question,
@@ -86,7 +87,13 @@ SECURITY_REPORTS: dict[str, dict[str, Any]] = {}
 SENTINEL_GRAPHS: dict[str, dict[str, Any]] = {}
 RATE_BUCKETS: dict[str, list[float]] = defaultdict(list)
 OAUTH_STATE_COOKIE = "codewhy_oauth_state"
+_CURRENT_SARVAM_KEY: ContextVar[str] = ContextVar("codewhy_sarvam_key", default="")
+_CURRENT_USER_ID: ContextVar[int] = ContextVar("codewhy_user_id", default=0)
+def current_sarvam_api_key() -> str:
+    return _CURRENT_SARVAM_KEY.get() or SARVAM_API_KEY
+
 init_auth_db()
+init_monetization_db()
 init_shield_db()
 if AUTH_REQUIRED and not oauth_ready():
     raise RuntimeError("AUTH_REQUIRED=true needs GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET, GITHUB_OAUTH_REDIRECT_URI, and SESSION_SECRET (32+ characters).")
@@ -704,7 +711,14 @@ async def auth_and_tenant_middleware(request: Request, call_next):
                     from fastapi.responses import JSONResponse
                     return JSONResponse({"detail": "Repository access denied."}, status_code=404)
 
-    response = await call_next(request)
+    personal_sarvam_key = get_sarvam_key(user.get("id") if user else None)
+    sarvam_key_token = _CURRENT_SARVAM_KEY.set(personal_sarvam_key or SARVAM_API_KEY)
+    user_id_token = _CURRENT_USER_ID.set(int(user["id"]) if user else 0)
+    try:
+        response = await call_next(request)
+    finally:
+        _CURRENT_SARVAM_KEY.reset(sarvam_key_token)
+        _CURRENT_USER_ID.reset(user_id_token)
     if not user and not request.cookies.get("codewhy_anon"):
         response.set_cookie("codewhy_anon", anon_id, httponly=True, secure=request.url.scheme == "https", samesite="lax", max_age=60 * 60 * 24 * 30, path="/")
 
@@ -1383,7 +1397,7 @@ async def sentinel_code_helper_commit(req: CodeHelperCommitRequest, request: Req
     }
 
 async def sarvam_answer(question: str, context: str, system_prompt: str | None = None) -> tuple[str, str]:
-    if not SARVAM_API_KEY:
+    if not current_sarvam_api_key():
         return ("Sarvam AI is not configured yet. Add SARVAM_API_KEY to your deployment environment to enable live answers. The repository evidence is ready and shown alongside this response.", "not_configured")
     question = redact_source(question)
     context = redact_source(context)
@@ -1401,7 +1415,7 @@ async def sarvam_answer(question: str, context: str, system_prompt: str | None =
         try:
             response = await client.post(
                 f"{SARVAM_API_BASE}/chat/completions",
-                headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"},
+                headers={"api-subscription-key": current_sarvam_api_key(), "Content-Type": "application/json"},
                 json={
                     "model": SARVAM_MODEL,
                     "messages": [
@@ -1419,6 +1433,8 @@ async def sarvam_answer(question: str, context: str, system_prompt: str | None =
             content = message.get("content")
             if not isinstance(content, str) or not content.strip():
                 return "Sarvam returned no user-facing answer for this request. Try a narrower question or reduce the amount of retrieved context.", "sarvam_empty_response"
+            if _CURRENT_USER_ID.get():
+                record_ai_usage(_CURRENT_USER_ID.get())
             return content.strip(), "sarvam"
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text[:500]
@@ -1553,7 +1569,7 @@ async def voice_transcribe(
     mode: str = Form("codemix"),
     language_code: str = Form(None)
 ):
-    if not SARVAM_API_KEY:
+    if not current_sarvam_api_key():
         raise HTTPException(503, "Add SARVAM_API_KEY to enable Sarvam speech recognition.")
     allowed_modes = {"transcribe", "translate", "verbatim", "translit", "codemix"}
     if mode not in allowed_modes:
@@ -1585,7 +1601,7 @@ async def voice_transcribe(
         async with httpx.AsyncClient(timeout=45) as client:
             response = await client.post(
                 "https://api.sarvam.ai/speech-to-text",
-                headers={"api-subscription-key": SARVAM_API_KEY},
+                headers={"api-subscription-key": current_sarvam_api_key()},
                 data=data_payload,
                 files={"file": (filename, audio, content_type)},
             )
@@ -1615,13 +1631,13 @@ async def voice_transcribe(
 
 @app.post("/api/voice/speak")
 async def voice_speak(req: SpeechSynthesisRequest):
-    if not SARVAM_API_KEY:
+    if not current_sarvam_api_key():
         raise HTTPException(503, "Add SARVAM_API_KEY to enable Sarvam speech synthesis.")
     async with httpx.AsyncClient(timeout=45) as client:
         try:
             response = await client.post(
                 "https://api.sarvam.ai/text-to-speech",
-                headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"},
+                headers={"api-subscription-key": current_sarvam_api_key(), "Content-Type": "application/json"},
                 json={"text": req.text, "language_code": req.language_code, "model": "bulbul:v4-flash", "speaker": "shubh_enhi_ads", "enable_preprocessing": True},
             )
             response.raise_for_status()
@@ -1875,14 +1891,14 @@ async def ensure_sentinel_graph(repo_id: str) -> dict[str, Any]:
 
 async def generate_sarvam_speech(text: str, language_code: str = "en-IN") -> tuple[str, str]:
     """Generate audio via Sarvam Bulbul v4-flash with Indian language voice mapping."""
-    if not SARVAM_API_KEY:
+    if not current_sarvam_api_key():
         return "", "unconfigured"
     voice = next((l["voice"] for l in SUPPORTED_LANGUAGES if l["code"] == language_code), "shubh_enhi_ads")
     try:
         async with httpx.AsyncClient(timeout=40) as client:
             resp = await client.post(
                 "https://api.sarvam.ai/text-to-speech",
-                headers={"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"},
+                headers={"api-subscription-key": current_sarvam_api_key(), "Content-Type": "application/json"},
                 json={
                     "text": text[:2000],
                     "language_code": language_code,
@@ -2293,7 +2309,7 @@ async def sentinel_generate_fix(req: GenerateFixRequest):
 @app.post("/api/sentinel/speak")
 async def sentinel_speak_response(req: SpeechSynthesisRequest):
     """Generate audio via Sarvam Text-to-Speech for an investigation response."""
-    if not SARVAM_API_KEY:
+    if not current_sarvam_api_key():
         raise HTTPException(503, "Sarvam API key is not configured for speech synthesis.")
     audio_base64, provider = await generate_sarvam_speech(req.text, req.language_code)
     if not audio_base64:
@@ -2331,6 +2347,73 @@ async def sentinel_overview(repo_id: str):
         "graph_stats": sentinel_graph.get("stats", {})
     }
 
+
+
+class DemoPlanRequest(BaseModel):
+    plan_id: str
+
+class SarvamKeyRequest(BaseModel):
+    api_key: str = Field(min_length=10, max_length=500)
+
+@app.get("/account")
+async def account_page():
+    return FileResponse(str(STATIC_DIR / "account.html"))
+
+@app.get("/api/account/overview")
+async def account_overview(request: Request):
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(401, "Sign in with GitHub to manage your account.")
+    return {"subscription": get_subscription(user["id"]), "plans": PLANS, "key": sarvam_key_status(user["id"])}
+
+@app.post("/api/account/subscription")
+async def account_change_subscription(req: DemoPlanRequest, request: Request):
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(401, "Sign in with GitHub to change your subscription.")
+    try:
+        subscription = set_demo_plan(user["id"], req.plan_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    audit(user, "subscription.demo_plan_changed", req.plan_id, "Demo-only plan selection; no payment processed")
+    return {"subscription": subscription, "plans": PLANS, "key": sarvam_key_status(user["id"])}
+
+@app.post("/api/account/sarvam-key")
+async def account_save_sarvam_key(req: SarvamKeyRequest, request: Request):
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(401, "Sign in with GitHub to save a personal Sarvam key.")
+    api_key = req.api_key.strip()
+    if not api_key or any(ch.isspace() for ch in api_key):
+        raise HTTPException(400, "Enter a valid Sarvam API key.")
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(
+                f"{SARVAM_API_BASE}/chat/completions",
+                headers={"api-subscription-key": api_key, "Content-Type": "application/json"},
+                json={"model": SARVAM_MODEL, "messages": [{"role": "user", "content": "Reply OK."}], "max_tokens": 1, "temperature": 0}
+            )
+        if response.status_code in (401, 403):
+            raise HTTPException(400, "Sarvam rejected this API key. Check the key and try again.")
+        if response.status_code >= 400:
+            raise HTTPException(502, f"Sarvam key validation returned HTTP {response.status_code}.")
+    except httpx.RequestError:
+        raise HTTPException(502, "Could not reach Sarvam to validate the key. Please try again.")
+    try:
+        save_sarvam_key(user["id"], api_key)
+    except RuntimeError:
+        raise HTTPException(503, "Secure key storage is unavailable. Configure SESSION_SECRET with at least 32 characters, then retry.")
+    audit(user, "settings.sarvam_key_saved", "Sarvam AI", "Personal API key validated and encrypted")
+    return {"status": "saved", "message": "Sarvam key validated and encrypted successfully.", "key": sarvam_key_status(user["id"])}
+
+@app.delete("/api/account/sarvam-key")
+async def account_remove_sarvam_key(request: Request):
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(401, "Sign in with GitHub to manage your personal Sarvam key.")
+    delete_sarvam_key(user["id"])
+    audit(user, "settings.sarvam_key_removed", "Sarvam AI", "Personal API key removed")
+    return {"status": "removed", "message": "Personal key removed. CODEWHY will use its configured server key, if available.", "key": sarvam_key_status(user["id"])}
 
 @app.get("/")
 async def index():
