@@ -24,6 +24,11 @@ from pydantic import BaseModel, Field
 from app.security import redact_source, security_report, scan_source
 from app.accuracy import evaluate_accuracy
 from app.impact import analyze_change_impact
+from app.middleware import (
+    RateLimiterMiddleware,
+    SecurityHeadersMiddleware,
+    PayloadGuardMiddleware
+)
 from app.auth import (AUTH_REQUIRED, CSRF_COOKIE, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI, SESSION_COOKIE, audit, audit_list, create_session, delete_session, get_session, init_auth_db, load_investigations, load_security_scans, oauth_ready, save_investigation, save_security_scan, valid_csrf)
 
 try:
@@ -44,6 +49,12 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
 NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
 
 app = FastAPI(title="CODEWHY API", version="1.0.0")
+
+# Enterprise API Security & Rate Limiting (OWASP & RFC 6585)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(PayloadGuardMiddleware, max_json_bytes=2 * 1024 * 1024, max_upload_bytes=15 * 1024 * 1024)
+app.add_middleware(RateLimiterMiddleware, heavy_limit=10, standard_limit=60, window_seconds=60)
+
 origins = [x.strip() for x in os.getenv("CORS_ORIGINS", "").split(",") if x.strip()]
 if origins:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
