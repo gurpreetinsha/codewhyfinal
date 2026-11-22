@@ -64,7 +64,7 @@
 <div class="side-bottom"><div class="status"><strong><span class="dot"></span>System operational</strong><div id="sys-status">Checking integrations…</div><div style="margin-top:8px">CODEWHY v1.0 · Hackathon build</div></div></div>
 </aside>
 <main class="main">
-<header class="top"><div class="crumb">WORKSPACE / <span style="color:#dce5f0">OVERVIEW</span></div><div class="topright"><span class="pill" id="mode-pill">DEMO WORKSPACE</span><span class="pill" id="role-pill" style="display:none;color:var(--lime);border-color:#354334;font-weight:700">DEVELOPER</span><button class="btn" id="my-repos-btn" style="display:none;padding:7px 11px;font-size:11px">📁 My Repositories</button><button class="btn" id="auth-action" style="display:none;padding:7px 11px;font-size:11px">Sign in</button><div class="avatar" id="avatar" style="cursor:pointer" title="Click to view profile menu">G</div></div></header>
+<header class="top"><div class="crumb">WORKSPACE / <span style="color:#dce5f0">OVERVIEW</span></div><div class="topright"><span class="pill" id="mode-pill">DEMO WORKSPACE</span><span class="pill" id="role-pill" style="display:none;color:var(--lime);border-color:#354334;font-weight:700">DEVELOPER</span><button class="btn" id="my-repos-btn" style="display:inline-block;padding:7px 11px;font-size:11px">📁 My Repositories</button><button class="btn" id="auth-action" style="display:inline-block;padding:7px 11px;font-size:11px">Sign in</button><div class="avatar" id="avatar" style="cursor:pointer" title="Click to view profile menu">G</div></div></header>
 <div id="auth-alert" style="display:none;padding:12px 18px;border-radius:10px;margin-bottom:20px;font-size:12px;display:flex;align-items:center;justify-content:space-between"></div>
 <section class="hero"><div><div class="eyebrow">Codebase intelligence, not guesswork</div><h1>Know your code.<br><span style="color:var(--lime)">Know the why.</span></h1><p>Map the moving parts, uncover hidden dependencies, and ask the questions your code never documented.</p></div><div class="actions"><button class="btn" id="demo-btn">↗ Load demo</button><button class="btn primary" onclick="document.getElementById('repo-url').focus()">＋ Connect repository</button></div></section>
 <section class="connect"><div class="spark">✳</div><div class="connect-copy"><strong>Bring a codebase into focus</strong><small>Connect a GitHub repository to map its architecture in seconds.</small></div><div class="connect-form"><input id="repo-url" placeholder="https://github.com/owner/repository"><button class="btn primary" id="scan-btn">Scan repo →</button></div></section>
@@ -74,6 +74,134 @@
 </section>
 <section class="stats">
 <div class="stat"><label>Source files</label><strong id="s-files">—</strong><small>Across the repository</small></div><div class="stat"><label>Functions</label><strong id="s-functions">—</strong><small>Detected definitions</small></div><div class="stat"><label>Relationships</label><strong id="s-edges">—</strong><small>Imports + definitions + calls</small></div><div class="stat"><label>Debt signals</label><strong id="s-debt">—</strong><small>Heuristic findings</small></div>
+</section>
+<section class="card" id="overview-features-card" style="margin-bottom:18px">
+  <div class="card-head">
+    <h2>Platform Features</h2>
+    <small>DIRECT ACCESS TO ALL CODEWHY MODULES</small>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:16px">
+    <button type="button" class="btn feature-nav-btn" data-tab="sentinel" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid var(--lime);border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--lime);font-size:16px">🛡</span>
+          <strong style="color:var(--text);font-size:13px">CodeWhy Sentinel</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Cyber attack paths & auto-fixes</small>
+      </div>
+      <span style="color:var(--lime);font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="graph" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid var(--cyan);border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--cyan);font-size:16px">⌘</span>
+          <strong style="color:var(--text);font-size:13px">Code Graph</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Interactive architecture map</small>
+      </div>
+      <span style="color:var(--cyan);font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="debt" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid var(--amber);border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--amber);font-size:16px">◉</span>
+          <strong style="color:var(--text);font-size:13px">Technical Debt</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Hotspots & debt radar</small>
+      </div>
+      <span style="color:var(--amber);font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="ask" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid var(--lime);border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--lime);font-size:16px">✳</span>
+          <strong style="color:var(--text);font-size:13px">Ask CODEWHY</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Plain English code answers</small>
+      </div>
+      <span style="color:var(--lime);font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="security" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid #ff4757;border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:#ff4757;font-size:16px">⌑</span>
+          <strong style="color:var(--text);font-size:13px">Security Center</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">SAST scans & secret detection</small>
+      </div>
+      <span style="color:#ff4757;font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="investigate" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid #b388ff;border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:#b388ff;font-size:16px">◎</span>
+          <strong style="color:var(--text);font-size:13px">Investigator</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Root-cause inquiry engine</small>
+      </div>
+      <span style="color:#b388ff;font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="pr" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid var(--cyan);border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--cyan);font-size:16px">⇄</span>
+          <strong style="color:var(--text);font-size:13px">PR Risk Reviewer</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Blast radius & diff analysis</small>
+      </div>
+      <span style="color:var(--cyan);font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="change" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid var(--amber);border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--amber);font-size:16px">⌁</span>
+          <strong style="color:var(--text);font-size:13px">Change Simulator</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Pre-merge ripple effects</small>
+      </div>
+      <span style="color:var(--amber);font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="history" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid #70a1ff;border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:#70a1ff;font-size:16px">◷</span>
+          <strong style="color:var(--text);font-size:13px">History & Reports</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Audits & exportable artifacts</small>
+      </div>
+      <span style="color:#70a1ff;font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="trust" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid var(--lime);border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--lime);font-size:16px">🏛</span>
+          <strong style="color:var(--text);font-size:13px">Trust & SOC 2</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Control matrix & disclosures</small>
+      </div>
+      <span style="color:var(--lime);font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="shield" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid #ff4757;border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:#ff4757;font-size:16px">🛡</span>
+          <strong style="color:var(--text);font-size:13px">Security Shield</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">WAF defense & attack simulator</small>
+      </div>
+      <span style="color:#ff4757;font-size:14px">→</span>
+    </button>
+    <button type="button" class="btn feature-nav-btn" data-tab="users" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;background:#111720;border:1px solid #1f2b38;border-left:3px solid var(--cyan);border-radius:8px;text-align:left;cursor:pointer">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:var(--cyan);font-size:16px">👥</span>
+          <strong style="color:var(--text);font-size:13px">User Management</strong>
+        </div>
+        <small style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Role assignments & RBAC</small>
+      </div>
+      <span style="color:var(--cyan);font-size:14px">→</span>
+    </button>
+  </div>
 </section>
 <section class="layout">
 <div class="card" id="graph-card"><div class="card-head"><h2>Architecture map</h2><small id="graph-count">LIVE RELATIONSHIP VIEW</small></div><div class="graph-wrap" id="graph"></div><div class="graph-legend"><span><i class="legend-dot" style="background:var(--lime)"></i>FILE</span><span><i class="legend-dot" style="background:var(--cyan)"></i>FUNCTION</span><span><i class="legend-dot" style="background:var(--amber)"></i>CLASS</span><span style="margin-left:auto">STATIC ANALYSIS</span></div></div>
@@ -953,7 +1081,9 @@
   </div>
 </div>
 
-<div class="modal" id="file-modal"><div class="modal-box"><div class="modal-top"><strong id="modal-title">Source file</strong><button id="modal-close">×</button></div><div id="file-insights" style="margin-bottom:14px;color:#9eabba;font-size:11px;line-height:1.7"></div><pre class="code" id="modal-code"></pre></div></div><div class="toast" id="toast"></div>
+<div class="modal" id="file-modal"><div class="modal-box"><div class="modal-top"><strong id="modal-title">Source file</strong><button id="modal-close">×</button></div><div id="file-insights" style="margin-bottom:14px;color:#9eabba;font-size:11px;line-height:1.7"></div><pre class="code" id="modal-code"></pre></div></div>
+<div class="modal" id="sentinel-fix-modal" style="display:none"><div class="modal-box" style="max-width:760px;border-color:#1e4330;background:#0b1117"><div class="modal-top"><strong id="sentinel-fix-modal-title" style="color:var(--lime);display:flex;align-items:center;gap:8px"><span>🛡️</span> Sarvam AI Verified Corrected Code</strong><button id="sentinel-fix-modal-close">×</button></div><div id="sentinel-fix-modal-body" style="line-height:1.6;font-size:12px;max-height:75vh;overflow-y:auto;padding-right:4px"></div></div></div>
+<div class="toast" id="toast"></div>
 <script>
 const state={id:null,repo:null,debt:[],graph:null,csrf:"",role:"",authenticated:false,recording:false,recorder:null,chunks:[],sentinel:{recording:false,recorder:null,chunks:[],currentInvestigation:null,audio:null}};
 const $=id=>document.getElementById(id);
@@ -963,8 +1093,15 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function setLoading(el,on){el.classList.toggle('loading',on)}
 async function loadDemo(){try{const d=await api('/api/demo');render(d);$('mode-pill').textContent='DEMO WORKSPACE';toast('Demo codebase loaded')}catch(e){toast(e.message)}}
 async function loadGitHubRepos(){
-  const card=$('github-repos-card');if(!card||!state.authenticated)return;
-  card.style.display='block';$('github-repo-count').textContent='LOADING';
+  const card=$('github-repos-card');if(!card)return;
+  const currentCrumb=document.querySelector('.crumb span')?.textContent;
+  card.style.display=(currentCrumb==='OVERVIEW'||!currentCrumb)?'block':'none';
+  if(!state.authenticated){
+    $('github-repo-count').textContent='CONNECT GITHUB';
+    $('github-repo-list').innerHTML='<div class="empty" style="text-align:center;padding:16px"><p style="margin:0 0 10px;color:var(--muted)">Sign in with GitHub to list and analyze your repositories.</p><a class="btn primary" href="/api/auth/github" style="display:inline-block;text-decoration:none;padding:7px 13px">Sign in with GitHub →</a></div>';
+    return;
+  }
+  $('github-repo-count').textContent='LOADING';
   $('github-repo-list').innerHTML='<div class="empty">Fetching repositories from GitHub…</div>';
   try{
     const data=await api('/api/github/repos');
@@ -1041,7 +1178,7 @@ function renderDebt(){if(!state.debt.length){$('debt-list').innerHTML='<div clas
 function renderFiles(){const files=Object.keys(state.repo.files||{});$('file-list').innerHTML=files.slice(0,70).map(p=>`<button class="file-row" data-path="${esc(p)}"><span>⌁ &nbsp;${esc(p)}</span><small>${state.repo.files[p].lines}L</small></button>`).join('')||'<div class="empty">No files available</div>';document.querySelectorAll('.file-row').forEach(b=>b.addEventListener('click',()=>openFile(b.dataset.path)))}
 async function openFile(path){try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/file?path='+encodeURIComponent(path));$('modal-title').textContent=d.path;$('modal-code').textContent=d.content;$('file-insights').textContent='Loading file history…';$('file-modal').classList.add('open');const [history,impact]=await Promise.all([api('/api/repos/'+encodeURIComponent(state.id)+'/history?path='+encodeURIComponent(path)).catch(()=>({commits:[],note:'History unavailable'})),api('/api/repos/'+encodeURIComponent(state.id)+'/impact',{method:'POST',body:JSON.stringify({path})}).catch(()=>null)]);const commits=history.commits||[];$('file-insights').innerHTML='<b style="color:var(--lime)">WHY HISTORY</b> · '+esc(history.note||'Historical commit evidence')+'<br>'+ (commits.length?commits.map(x=>'• '+esc(x.date.slice(0,10))+' — '+esc(x.message)+' <span style="color:#667487">('+esc(x.author)+')</span>').join('<br>'):'No commit entries found for this file.')+(impact?'<br><br><b style="color:var(--cyan)">CHANGE IMPACT</b> · '+impact.count+' transitive dependent file(s) detected. '+(impact.direct_dependents.length?'Direct: '+impact.direct_dependents.map(esc).join(', '):'No direct importers detected.'):'');}catch(e){toast(e.message)}}
 async function scan(){const url=$('repo-url').value.trim();if(!url)return toast('Paste a GitHub repository URL first');const b=$('scan-btn');setLoading(b,true);b.textContent='Scanning…';try{const d=await api('/api/repos/scan',{method:'POST',body:JSON.stringify({url})});render(d);$('mode-pill').textContent='CONNECTED REPOSITORY';toast('Repository scanned successfully')}catch(e){toast(e.message)}finally{setLoading(b,false);b.textContent='Scan repo →'}}
-async function ask(){if(!state.id)return toast('Load demo or scan a repository first');const question=$('question').value.trim();if(!question)return toast('Type a question first');const b=$('ask-btn');setLoading(b,true);b.textContent='Thinking…';$('answer').textContent='Retrieving source evidence and asking Sarvam…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/ask',{method:'POST',body:JSON.stringify({question})});$('answer').innerHTML='<div>'+esc(d.answer).replace(/\n/g,'<br>')+'</div><div class="evidence">'+d.evidence.map(e=>'<button class="evidence-file" data-path="'+esc(e.path)+'">'+esc(e.path)+'</button>').join('')+'</div><div style="color:#657184;font-size:10px;margin-top:10px">Provider: '+esc(d.provider)+' · '+esc(d.disclaimer)+'</div>';wireEvidenceLinks()}catch(e){$('answer').textContent=e.message}finally{setLoading(b,false);b.textContent='Ask →'}}
+async function ask(){if(!state.id)return toast('Load demo or scan a repository first');const question=$('question').value.trim();if(!question)return toast('Type a question first');const b=$('ask-btn');setLoading(b,true);b.textContent='Thinking…';$('answer').textContent='Retrieving source evidence and asking Sarvam…';try{const d=await api('/api/repos/'+encodeURIComponent(state.id)+'/ask',{method:'POST',body:JSON.stringify({question})});const formattedAnswer=typeof renderSentinelMarkdown==='function'?renderSentinelMarkdown(d.answer):esc(d.answer).replace(/\n/g,'<br>');$('answer').innerHTML='<div class="ask-response-body" style="font-size:13px;line-height:1.7">'+formattedAnswer+'</div><div class="evidence" style="margin-top:14px">'+d.evidence.map(e=>'<button class="evidence-file" data-path="'+esc(e.path)+'">'+esc(e.path)+'</button>').join('')+'</div><div style="color:#657184;font-size:10px;margin-top:10px">Provider: '+esc(d.provider)+' · '+esc(d.disclaimer)+'</div>';wireEvidenceLinks();$('answer').querySelectorAll('.copy-code-btn').forEach(btn=>{btn.addEventListener('click',()=>{const code=btn.getAttribute('data-code');if(code){navigator.clipboard.writeText(code).then(()=>{const orig=btn.innerHTML;btn.innerHTML='✓ Copied!';setTimeout(()=>{btn.innerHTML=orig;},2000);});}});});}catch(e){$('answer').textContent=e.message}finally{setLoading(b,false);b.textContent='Ask →'}}
 
 function wireEvidenceLinks(){document.querySelectorAll('.evidence-file').forEach(b=>b.addEventListener('click',()=>openFile(b.dataset.path)))}
 function renderSecurity(data){const s=data.summary||{};$('security-meta').textContent=(s.dependencies_checked||0)+' exact-version dependencies checked · '+(s.vulnerable_dependencies||0)+' vulnerable dependency advisories · '+(s.total||0)+' total findings';$('risk-score').textContent=s.risk_score??'—';$('critical-count').textContent=s.by_severity?.critical||0;$('high-count').textContent=s.by_severity?.high||0;$('medium-count').textContent=s.by_severity?.medium||0;$('low-count').textContent=s.by_severity?.low||0;const impact=data.business_impact||{};const money=n=>'₹'+Number(n||0).toLocaleString('en-IN');$('security-business-impact').innerHTML=impact.total_loss_high_inr!==undefined?'<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><div style="font:10px var(--mono);color:var(--amber);letter-spacing:1px">BUSINESS RISK · ILLUSTRATIVE SCENARIO</div><strong style="font-size:21px;display:block;margin-top:5px">'+money(impact.total_loss_low_inr)+' – '+money(impact.total_loss_high_inr)+'</strong><small style="color:var(--muted)">Potential incident-loss range across detected findings</small></div><span class="sev high">NOT A FORECAST</span></div><div style="font-size:10px;color:var(--muted);line-height:1.6;margin-top:10px">Assumes ₹50,000 daily revenue, 8 hours of downtime, ₹1,00,000 incident response, and 1,000 customer records valued at ₹500 each. '+esc((impact.limitations||[]).join(' '))+'</div>':'<div class="empty">Business impact estimate unavailable.</div>';$('security-findings').innerHTML=(data.findings||[]).map(x=>{const est=(impact.findings||[]).find(v=>v.id===x.id);return '<div class="debt-item"><div class="debt-top"><span class="sev '+esc(x.severity)+'">'+esc(x.severity)+'</span><strong>'+esc(x.title)+'</strong></div><p>'+esc(x.evidence||'')+' · '+esc(x.recommendation||'')+'</p>'+(est?'<p style="color:var(--amber)">Scenario loss if exploited: '+money(est.loss_low_inr)+' – '+money(est.loss_high_inr)+'</p>':'')+'<button class="file-row security-file" data-path="'+esc(x.path)+'">'+esc(x.path)+(x.line?':'+x.line:'')+' · '+esc(x.category)+' · '+esc(x.confidence)+'</button></div>'}).join('')||'<div class="empty">No findings from configured checks. This is not proof that the repository is secure.</div>';document.querySelectorAll('.security-file').forEach(b=>b.addEventListener('click',()=>openFile(b.dataset.path)));$('attack-count').textContent=(data.attack_paths||[]).length+' CANDIDATE PATHS';$('attack-paths').innerHTML=(data.attack_paths||[]).map(x=>'<div class="debt-item"><div class="debt-top"><span class="sev medium">REVIEW</span><strong>'+esc(x.source_file)+' → '+esc(x.sink_file)+'</strong></div><p>'+esc(x.path.join(' → '))+'</p><div class="path">'+esc(x.evidence)+'</div></div>').join('')||'<div class="empty">No import-connected route-to-sink candidates detected. Dynamic flows may be missed.</div>'}
@@ -1265,12 +1402,22 @@ function renderSentinelMarkdown(md){
   const codeBlocks=[];
   let text=String(md).replace(/```([a-z0-9_-]*)\n([\s\S]*?)```/gi,(match,lang,code)=>{
     const idx=codeBlocks.length;
-    codeBlocks.push(`<pre class="code" style="background:#090d14;border:1px solid #222f3e;border-radius:8px;padding:12px;margin:10px 0;overflow-x:auto;font:11px/1.6 var(--mono);color:#cce0ff"><div style="color:#60738a;font-size:9px;text-transform:uppercase;margin-bottom:6px">${esc(lang||'code')}</div><code>${esc(code.trim())}</code></pre>`);
+    const cleanCode=code.trim();
+    codeBlocks.push(`
+      <div class="code-block-wrapper" style="position:relative;margin:12px 0;border:1px solid #1c2b22;border-radius:8px;overflow:hidden;background:#070d0a">
+        <div style="display:flex;justify-content:space-between;align-items:center;background:#0c1913;padding:6px 12px;border-bottom:1px solid #1b2e23">
+          <span style="font:9px var(--mono);text-transform:uppercase;color:var(--lime);letter-spacing:1px">💻 ${esc(lang||'code')} · CORRECTED IMPLEMENTATION</span>
+          <button class="btn copy-code-btn" data-code="${esc(cleanCode)}" style="padding:2px 8px;font-size:10px;background:#15281e;color:var(--lime);border-color:#2a4d38">📋 Copy Code</button>
+        </div>
+        <pre class="code" style="padding:12px;margin:0;overflow-x:auto;font:11px/1.6 var(--mono);color:#d0f0d8;background:transparent"><code>${esc(cleanCode)}</code></pre>
+      </div>
+    `);
     return `%%CODEBLOCK_${idx}%%`;
   });
 
   text=text.replace(/^### (.*$)/gim,'<h3 style="color:var(--lime);font-size:14px;margin:16px 0 8px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1c2734;padding-bottom:5px">$1</h3>');
   text=text.replace(/^#### (.*$)/gim,'<h4 style="color:var(--cyan);font-size:12px;margin:12px 0 6px">$1</h4>');
+  text=text.replace(/^##### (.*$)/gim,'<h5 style="color:#dce5f0;font-size:11px;margin:10px 0 4px">$1</h5>');
   text=text.replace(/^## (.*$)/gim,'<h2 style="color:var(--text);font-size:16px;margin:18px 0 10px">$1</h2>');
 
   text=text.replace(/\*\*(.*?)\*\*/g,'<strong style="color:#ffffff">$1</strong>');
@@ -1809,13 +1956,118 @@ function renderSentinelResults(d){
           <p style="margin:6px 0;font-size:12px"><b>Evidence:</b> <code>${esc(f.supporting_evidence||f.evidence||'')}</code></p>
           <p style="color:var(--muted);font-size:11px;margin:4px 0"><b>Impact:</b> ${esc(f.potential_impact||'')}</p>
           <p style="color:var(--lime);font-size:11px;margin:4px 0"><b>Remediation:</b> ${esc(f.recommended_action||f.recommendation||'')}</p>
-          <button class="file-row security-file" data-path="${esc(f.affected_file||f.path||'')}" style="margin-top:6px">
+
+          <!-- SARVAM & SENTINEL CORRECTED CODE PANEL -->
+          <div class="corrected-code-panel" style="margin-top:10px;background:#09140f;border:1px solid #1e452e;border-radius:8px;padding:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="sev" style="background:#163b27;color:var(--lime);font-size:10px;font-weight:700;padding:2px 7px">🛡️ CORRECTED CODE AVAILABLE</span>
+                <span style="font:11px var(--mono);color:var(--text);font-weight:600">${esc(f.fix_summary||'Verified safe replacement')}</span>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn copy-finding-fix-btn" data-fix="${esc(f.corrected_code||'')}" style="padding:4px 10px;font-size:11px;background:#133320;color:var(--lime);border-color:#2a633f">
+                  📋 Copy Corrected Code
+                </button>
+                <button class="btn ask-sarvam-fix-btn" data-repo="${esc(d.repo_id)}" data-finding="${esc(f.finding_id)}" data-title="${esc(f.title)}" style="padding:4px 10px;font-size:11px;background:#102235;color:var(--cyan);border-color:#1e4368">
+                  ✨ Ask Sarvam to Refine
+                </button>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-top:8px">
+              <div style="background:#16090b;border:1px solid #4a181e;border-radius:6px;padding:10px">
+                <div style="font:9px var(--mono);color:#ff7878;text-transform:uppercase;margin-bottom:6px;font-weight:700">❌ Vulnerable Code (Before)</div>
+                <pre class="code" style="margin:0;font:11px/1.5 var(--mono);color:#ffb0b0;background:transparent;max-height:160px;overflow-y:auto;white-space:pre-wrap"><code>${esc(f.vulnerable_code||f.evidence||'Insecure code construct')}</code></pre>
+              </div>
+              <div style="background:#06140b;border:1px solid #1a4f2e;border-radius:6px;padding:10px">
+                <div style="font:9px var(--mono);color:var(--lime);text-transform:uppercase;margin-bottom:6px;font-weight:700">✅ Corrected Code (After)</div>
+                <pre class="code" style="margin:0;font:11px/1.5 var(--mono);color:#bbf7ce;background:transparent;max-height:160px;overflow-y:auto;white-space:pre-wrap"><code>${esc(f.corrected_code||'Safe code implementation')}</code></pre>
+              </div>
+            </div>
+          </div>
+
+          <button class="file-row security-file" data-path="${esc(f.affected_file||f.path||'')}" style="margin-top:8px">
             <span>⌁ &nbsp;${esc(f.affected_file||f.path||'')}${f.line_number?':'+f.line_number:''}</span>
             <small style="color:var(--cyan)">Inspect in code viewer →</small>
           </button>
         </div>
       `;
     }).join('');
+
+    document.querySelectorAll('.copy-code-btn').forEach(b=>{
+      b.addEventListener('click',(e)=>{
+        e.stopPropagation();
+        navigator.clipboard.writeText(b.dataset.code||'');
+        toast('Corrected code copied to clipboard!');
+      });
+    });
+
+    document.querySelectorAll('.copy-finding-fix-btn').forEach(b=>{
+      b.addEventListener('click',(e)=>{
+        e.stopPropagation();
+        navigator.clipboard.writeText(b.dataset.fix||'');
+        toast('Corrected code copied to clipboard!');
+      });
+    });
+
+    document.querySelectorAll('.ask-sarvam-fix-btn').forEach(b=>{
+      b.addEventListener('click',async(e)=>{
+        e.stopPropagation();
+        const orig=b.textContent;
+        b.disabled=true;
+        b.textContent='Asking Sarvam…';
+        try{
+          const fix=await api('/api/sentinel/generate-fix',{
+            method:'POST',
+            body:JSON.stringify({
+              repo_id:b.dataset.repo,
+              finding_id:b.dataset.finding,
+              language_code:$('sentinel-language')?.value||'en-IN'
+            })
+          });
+          const modal=$('sentinel-fix-modal');
+          const modalBody=$('sentinel-fix-modal-body');
+          if(modal&&modalBody){
+            modalBody.innerHTML=`
+              <div style="margin-bottom:12px">
+                <span class="sev" style="background:#163b27;color:var(--lime);font-size:10px;font-weight:700;padding:2px 7px">SARVAM AI VERIFIED REMEDIATION</span>
+                <strong style="margin-left:8px;font-size:14px;color:var(--text)">${esc(fix.title||'Security Finding')}</strong>
+                <div style="font:11px var(--mono);color:var(--muted);margin-top:4px">Target: ${esc(fix.affected_file||'')}:${fix.line_number||1} · Provider: ${esc(fix.provider||'sarvam')}</div>
+              </div>
+              <div style="background:#0c1713;border:1px solid #1f4230;border-radius:8px;padding:12px;margin-bottom:12px">
+                <strong style="color:var(--lime);display:block;margin-bottom:6px">💡 Sarvam AI Explanation:</strong>
+                <div style="line-height:1.6;color:#d8eedf">${renderSentinelMarkdown(fix.ai_explanation||fix.fix_summary)}</div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-bottom:14px">
+                <div style="background:#17090b;border:1px solid #4a191f;border-radius:6px;padding:10px">
+                  <div style="font:10px var(--mono);color:#ff7878;font-weight:700;margin-bottom:6px">❌ VULNERABLE CODE (BEFORE)</div>
+                  <pre class="code" style="margin:0;font:11px/1.5 var(--mono);color:#ffb0b0;background:transparent;max-height:220px;overflow-y:auto;white-space:pre-wrap"><code>${esc(fix.vulnerable_code)}</code></pre>
+                </div>
+                <div style="background:#07160c;border:1px solid #1d4e30;border-radius:6px;padding:10px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <span style="font:10px var(--mono);color:var(--lime);font-weight:700">✅ CORRECTED CODE (AFTER)</span>
+                    <button class="btn" id="modal-copy-fix-btn" style="padding:2px 7px;font-size:10px;background:#153521;color:var(--lime);border-color:#2e6b45">📋 Copy</button>
+                  </div>
+                  <pre class="code" style="margin:0;font:11px/1.5 var(--mono);color:#bbf7ce;background:transparent;max-height:220px;overflow-y:auto;white-space:pre-wrap"><code>${esc(fix.corrected_code)}</code></pre>
+                </div>
+              </div>
+            `;
+            modal.style.display='flex';
+            modal.style.alignItems='center';
+            modal.style.justifyContent='center';
+            $('modal-copy-fix-btn')?.addEventListener('click',()=>{
+              navigator.clipboard.writeText(fix.corrected_code||'');
+              toast('Corrected code copied to clipboard!');
+            });
+          }
+        }catch(err){
+          toast('Failed to generate fix: '+err.message);
+        }finally{
+          b.disabled=false;
+          b.textContent=orig;
+        }
+      });
+    });
 
     document.querySelectorAll('.status-select').forEach(sel=>{
       sel.addEventListener('change',async()=>{
@@ -1936,11 +2188,12 @@ function escapeHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;'
   const duplicateIds=['security-section','investigate-section','pr-section','change-section','history-section','users-section','trust-section','shield-section'];
   duplicateIds.forEach(id=>{const matches=[...document.querySelectorAll('[id="'+id+'"]')];matches.slice(1).forEach(node=>node.remove())});
   const hero=document.querySelector('.hero'),connect=document.querySelector('.connect'),stats=document.querySelector('.stats');
+  const githubReposCard=$('github-repos-card'),overviewFeaturesCard=$('overview-features-card');
   const layout=document.querySelector('.main > .layout');
   const graphCard=$('graph-card'),rightcol=document.querySelector('.rightcol');
   const debtCard=rightcol?.children[0],filesCard=rightcol?.children[1];
   const views={
-    overview:[hero,connect,stats],
+    overview:[hero,connect,githubReposCard,overviewFeaturesCard,stats].filter(Boolean),
     sentinel:[$('sentinel-section')],
     graph:[layout,graphCard,filesCard],
     debt:[layout,debtCard],
@@ -1954,7 +2207,7 @@ function escapeHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;'
     trust:[$('trust-section')],
     shield:[$('shield-section')]
   };
-  const all=[hero,connect,stats,layout,$('sentinel-section'),$('ask-card'),$('security-section'),$('investigate-section'),$('pr-section'),$('change-section'),$('history-section'),$('users-section'),$('trust-section'),$('shield-section')].filter(Boolean);
+  const all=[hero,connect,githubReposCard,overviewFeaturesCard,stats,layout,$('sentinel-section'),$('ask-card'),$('security-section'),$('investigate-section'),$('pr-section'),$('change-section'),$('history-section'),$('users-section'),$('trust-section'),$('shield-section')].filter(Boolean);
   function activate(name){
     all.forEach(node=>{if(node)node.style.display='none'});
     if(rightcol)rightcol.style.display='none';
@@ -1963,6 +2216,10 @@ function escapeHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;'
       if(key!==name)return;
       nodes.forEach(node=>{if(node)node.style.display=''});
     });
+    const reposCard=$('github-repos-card');
+    if(reposCard) reposCard.style.display=(name==='overview')?'block':'none';
+    const myReposBtn=$('my-repos-btn');
+    if(myReposBtn) myReposBtn.style.display=(name==='overview')?'inline-block':'none';
     if(name==='graph'&&layout){layout.style.display='grid';layout.style.gridTemplateColumns='minmax(0,1fr) minmax(260px,.65fr)';if(rightcol)rightcol.style.display='grid';if(debtCard)debtCard.style.display='none';if(filesCard)filesCard.style.display='';}
     if(name==='debt'&&layout){layout.style.display='grid';layout.style.gridTemplateColumns='minmax(0,1fr)';if(rightcol)rightcol.style.display='grid';if(debtCard)debtCard.style.display='';if(filesCard)filesCard.style.display='none';}
     nav.forEach(button=>{const active=button.dataset.tab===name;button.classList.toggle('active',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current')});
@@ -2011,6 +2268,7 @@ function escapeHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;'
     window.scrollTo({top:0,behavior:'smooth'});
   }
   nav.forEach(button=>button.addEventListener('click',()=>activate(button.dataset.tab)));
+  document.querySelectorAll('.feature-nav-btn').forEach(btn=>btn.addEventListener('click',()=>activate(btn.dataset.tab)));
   const repoNav=$('repo-nav');if(repoNav)repoNav.addEventListener('click',()=>{activate('overview');setTimeout(()=>$('repo-url')?.focus(),150)});
   activate('overview');
 })();
@@ -2112,6 +2370,10 @@ async function openAuthorizedReposModal(){
   if(!modal)return;
   modal.style.display='flex';
   const list=$('repos-list');
+  if(!state.authenticated){
+    list.innerHTML=`<div class="empty" style="padding:24px 16px;text-align:center"><div style="font-size:26px;margin-bottom:8px">📁</div><strong style="color:var(--text);font-size:14px;display:block;margin-bottom:6px">Connect your GitHub Account</strong><p style="color:var(--muted);font-size:12px;margin:0 0 14px">Sign in with GitHub to view, select, and analyze your repositories.</p><a class="btn primary" href="/api/auth/github" style="display:inline-block;text-decoration:none;padding:8px 14px;font-size:12px">Sign in with GitHub →</a></div>`;
+    return;
+  }
   list.innerHTML='<div class="empty">Loading authorized repositories from GitHub…</div>';
   try{
     const data=await api('/api/auth/repositories');
@@ -2802,7 +3064,8 @@ async function submitNewIncident(e){
       }
       $('mode-pill').textContent=auth.user.role.toUpperCase()+' WORKSPACE';
       const myReposBtn=$('my-repos-btn');
-      if(myReposBtn)myReposBtn.style.display='inline-block';
+      const curCrumb=document.querySelector('.crumb span')?.textContent;
+      if(myReposBtn)myReposBtn.style.display=(curCrumb==='OVERVIEW'||!curCrumb)?'inline-block':'none';
 
       const navUsersBtn=$('nav-users-btn');
       if(navUsersBtn)navUsersBtn.style.display=auth.user.role==='admin'?'block':'none';
@@ -2823,10 +3086,12 @@ async function submitNewIncident(e){
     $('repos-modal-close')?.addEventListener('click',()=>{const m=$('repos-modal');if(m)m.style.display='none';});
     $('user-modal-close')?.addEventListener('click',()=>{const m=$('user-modal');if(m)m.style.display='none';});
     $('incident-modal-close')?.addEventListener('click',()=>{const m=$('incident-modal');if(m)m.style.display='none';});
+    $('sentinel-fix-modal-close')?.addEventListener('click',()=>{const m=$('sentinel-fix-modal');if(m)m.style.display='none';});
     window.addEventListener('click',(e)=>{
       if(e.target===$('repos-modal'))$('repos-modal').style.display='none';
       if(e.target===$('user-modal'))$('user-modal').style.display='none';
       if(e.target===$('incident-modal'))$('incident-modal').style.display='none';
+      if(e.target===$('sentinel-fix-modal'))$('sentinel-fix-modal').style.display='none';
     });
 
     const openIncidentModal=()=>{
@@ -2866,7 +3131,7 @@ async function submitNewIncident(e){
 
     const h=await api('/api/health');
     $('sys-status').textContent='Sarvam '+(h.sarvam_configured?'connected':'needs API key')+' · Neo4j '+(h.neo4j_connected?'connected':'memory mode');
-    if(auth.authenticated){loadGitHubRepos();}
+    loadGitHubRepos();
     await loadDemo();
     await loadHistory();
     await loadSecurityHistory();

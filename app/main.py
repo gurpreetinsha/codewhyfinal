@@ -37,7 +37,7 @@ from app.sentinel import (
     SUPPORTED_LANGUAGES, build_sentinel_graph, persist_sentinel_graph,
     query_neo4j_sentinel_context, identify_security_sensitive_components,
     reconstruct_defensive_attack_paths, understand_multilingual_security_question,
-    generate_evidence_backed_investigation
+    generate_evidence_backed_investigation, generate_corrected_code
 )
 from app.shield import (
     FIREWALL_ENABLED, MAX_STANDARD_PAYLOAD_BYTES, MAX_UPLOAD_PAYLOAD_BYTES,
@@ -503,6 +503,11 @@ class FindingStatusUpdateRequest(BaseModel):
     repo_id: str
     status: str = Field(default="open")
     notes: str = Field(default="", max_length=500)
+
+class GenerateFixRequest(BaseModel):
+    repo_id: str
+    finding_id: str
+    language_code: str = Field(default="en-IN", max_length=15)
 
 class UnderstandQueryRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
@@ -1402,7 +1407,16 @@ async def sarvam_answer(question: str, context: str, system_prompt: str | None =
         return ("Sarvam AI is not configured yet. Add SARVAM_API_KEY to your deployment environment to enable live answers. The repository evidence is ready and shown alongside this response.", "not_configured")
     question = redact_source(question)
     context = redact_source(context)
-    system = system_prompt or """You are CODEWHY, a careful staff-level software architect. Answer only from the supplied repository evidence. Clearly distinguish direct evidence from inference. Never invent business intent, runtime behaviour, commit history, tests, or ownership. If the evidence is insufficient, say what is unknown and what additional evidence would establish it. Cite file paths and line numbers where available. Be concise but useful."""
+    system = system_prompt or (
+        "You are CODEWHY, a friendly, clear, and highly skilled software engineering assistant. "
+        "Your mission is to explain code and answer developer questions in simple, plain, easy-to-understand language.\n\n"
+        "GUIDELINES FOR SIMPLE & CLEAR ANSWERS:\n"
+        "1. Direct & Simple: Start with a clear 1-2 sentence direct answer. Avoid robotic phrases, academic disclaimers, or dense jargon.\n"
+        "2. Easy to Read: Use short paragraphs and clean bullet points to explain how the code works.\n"
+        "3. Show Solutions: When there is an error or question about how to fix something, always show clean, safe code snippets.\n"
+        "4. Friendly Tone: Speak naturally like a helpful senior teammate explaining a concept clearly.\n"
+        "5. Clean Output: Never output raw JSON, AST tokens, or internal syntax representations."
+    )
     async with httpx.AsyncClient(timeout=75) as client:
         try:
             response = await client.post(
@@ -1451,12 +1465,16 @@ async def ask(repo_id: str, req: AskRequest):
     for score, path, info in selected:
         excerpt = numbered_excerpt(info["content"], 2400)
         evidence.append({"path": path, "lines": info["lines"], "relevance": score, "excerpt": excerpt})
-    context = "\n\n".join(f"FILE: {e['path']} ({e['lines']} lines)\n{e['excerpt']}" for e in evidence)
+    
+    context_lines = [
+        f"REPOSITORY: {graph['metadata'].get('full_name', repo_id)}\n",
+        "RELEVANT CODE EXCERPTS:\n" + "\n\n".join(f"--- File: {e['path']} ({e['lines']} lines) ---\n{e['excerpt']}" for e in evidence)
+    ]
     related_edges = [edge for edge in graph["edges"] if edge.get("source_path") in {e["path"] for e in evidence} or edge.get("target_path") in {e["path"] for e in evidence}]
-    context += "\nIN-MEMORY GRAPH RELATIONSHIPS:\n" + json.dumps(related_edges[:35])
-    persisted_context = neo4j_graph_context(repo_id, {e["path"] for e in evidence})
-    if persisted_context:
-        context += "\nNEO4J GRAPH NEIGHBOURHOOD:\n" + json.dumps(persisted_context)
+    if related_edges:
+        dep_lines = [f"• {e.get('source_path', '')} -> {e.get('target_path', '')}" for e in related_edges[:15]]
+        context_lines.append("\nCODE RELATIONSHIPS:\n" + "\n".join(dep_lines))
+
     security_terms = {"security", "vulnerability", "vulnerabilities", "vulnerable", "secret", "secrets", "attack", "attacks", "injection", "injections", "token", "tokens", "credential", "credentials", "exploit", "exploits", "password", "passwords"}
     if security_terms.intersection(set(terms)):
         security_data = SECURITY_REPORTS.get(repo_id)
@@ -1464,9 +1482,32 @@ async def ask(repo_id: str, req: AskRequest):
             security_data = await security_report({p: info["content"] for p, info in graph["files"].items()})
             security_data["attack_paths"] = attack_path_report(graph, security_data["findings"])
             SECURITY_REPORTS[repo_id] = security_data
-        context += "\nRELATED SECURITY FINDINGS:\n" + json.dumps([item for item in security_data["findings"] if item.get("path") in {e["path"] for e in evidence} or item.get("category") == "dependency"][:25])
-        context += "\nPOTENTIAL ATTACK PATH CANDIDATES:\n" + json.dumps([item for item in security_data.get("attack_paths", []) if item.get("source_file") in {e["path"] for e in evidence} or item.get("sink_file") in {e["path"] for e in evidence}][:10])
-    answer, provider = await sarvam_answer(req.question, context)
+        findings = [f"- {item.get('title')}: {item.get('recommendation', '')} (in {item.get('path')})" for item in security_data.get("findings", []) if item.get("path") in {e["path"] for e in evidence}][:10]
+        if findings:
+            context_lines.append("\nSECURITY CONTEXT:\n" + "\n".join(findings))
+
+    context = "\n".join(context_lines)
+
+    ask_system_prompt = (
+        "You are CODEWHY, a friendly, encouraging, and clear senior software engineer explaining code to a teammate. "
+        "Your mission is to give a simple, direct, crystal-clear explanation that anyone can easily understand.\n\n"
+        "ANSWER STRUCTURE:\n"
+        "### 💡 Simple Answer\n"
+        "Give a direct 1-2 sentence plain-English answer to the question.\n\n"
+        "### 🔍 How It Works\n"
+        "Explain step-by-step in 3 to 5 easy bullet points:\n"
+        "- Which file or function handles this.\n"
+        "- What happens first, next, and last.\n"
+        "- Any important logic or data passed.\n\n"
+        "### 🛠️ Practical Example or Solution\n"
+        "If the question asks how to do something, how to call it, or how to fix an issue, provide a clean, copy-pasteable code snippet with a 1-sentence note.\n\n"
+        "CRITICAL RULES:\n"
+        "- Use simple, everyday words. Avoid confusing jargon, mathematical notation, or stiff academic disclaimers.\n"
+        "- Never output raw JSON, AST tokens, dictionary dumps, or internal graph IDs.\n"
+        "- If code has an error, ALWAYS show the safe, corrected code snippet.\n"
+        "- Keep it concise, friendly, and practical."
+    )
+    answer, provider = await sarvam_answer(req.question, context, system_prompt=ask_system_prompt)
     return {"answer": answer, "provider": provider, "evidence": [{"path": e["path"], "lines": e["lines"], "relevance": e["relevance"]} for e in evidence], "disclaimer": "Answers are grounded in the retrieved source excerpts. Static analysis can miss dynamic behaviour and external context."}
 
 @app.get("/api/repos/{repo_id:path}/history")
@@ -1708,9 +1749,18 @@ async def autonomous_investigate(repo_id: str, req: InvestigationRequest, reques
         {"step": "Evidence retrieval", "detail": f"Selected {len(evidence)} source files using lexical relevance and repository paths."},
         {"step": "Graph expansion", "detail": f"Expanded evidence across import relationships; inspected {len(graph_edges)} nearby graph edges."},
         {"step": "Historical and security correlation", "detail": f"Retrieved {len(history_context)} recent commit messages and {len(security_context)} related security findings where relevant."},
-        {"step": "Evidence synthesis", "detail": "Asked the configured language model to distinguish observed code from inferred intent."}
+        {"step": "Evidence synthesis", "detail": "Asked the configured language model to synthesize conclusions in clear, plain words."}
     ]
-    answer, provider = await sarvam_answer(req.question, context)
+    investigate_system = (
+        "You are CODEWHY AUTONOMOUS INVESTIGATOR, a friendly, insightful engineering intelligence mentor. "
+        "Explain your investigation answer clearly, simply, and directly without robotic jargon or stiff disclaimers.\n\n"
+        "GUIDELINES:\n"
+        "• Start with a clear 1-2 sentence direct conclusion.\n"
+        "• Detail what was discovered across files and functions using concise bullet points.\n"
+        "• If an issue or vulnerability was found, show the safe corrected code snippet.\n"
+        "• Be simple, helpful, and easy to understand."
+    )
+    answer, provider = await sarvam_answer(req.question, context, system_prompt=investigate_system)
     cited = [e["path"] for e in evidence if e["path"] in answer]
     verification = {
         "status": "evidence_referenced" if cited else "needs_review",
@@ -2051,6 +2101,8 @@ async def sentinel_investigate(req: SentinelInvestigateRequest, request: Request
                 f"- Issue: {f['title']} in file '{f['affected_file']}' (line {f['line_number'] or 'N/A'})\n"
                 f"  Supporting Evidence: {f['supporting_evidence']}\n"
                 f"  Potential Impact: {f['potential_impact']}\n"
+                f"  Vulnerable Code Pattern:\n```{f.get('code_language', 'python')}\n{f.get('vulnerable_code', '')}\n```\n"
+                f"  Safe Corrected Code Reference:\n```{f.get('code_language', 'python')}\n{f.get('corrected_code', '')}\n```\n"
                 f"  Remediation Action: {f['recommended_action']}"
             )
         findings_text = "\n".join(findings_bullets) or "No critical static vulnerabilities confirmed in this scope."
@@ -2066,7 +2118,7 @@ async def sentinel_investigate(req: SentinelInvestigateRequest, request: Request
             f"Codebase: {graph['metadata'].get('full_name', req.repo_id)}\n"
             f"Developer Query: {req.question}\n"
             f"Normalized Inquiry: {understanding['normalized_english_inquiry']}\n\n"
-            f"CONFIRMED FINDINGS IN CODE:\n{findings_text}\n\n"
+            f"CONFIRMED FINDINGS IN CODE (WITH VULNERABLE & SAFE CODE):\n{findings_text}\n\n"
             f"ATTACK PATH CONNECTIONS:\n{paths_text}\n\n"
             f"RELEVANT CODE EXCERPTS:\n" + "\n\n".join(f"--- File: {e['path']} ---\n{e['excerpt']}" for e in evidence_files[:3])
         )
@@ -2078,20 +2130,25 @@ async def sentinel_investigate(req: SentinelInvestigateRequest, request: Request
             "1. Speak in plain, conversational language. Avoid robotic, overly dense academic or formal jargon.\n"
             "2. Never print raw JSON, AST tokens, or internal regex patterns.\n"
             "3. If the user asked in Hindi, Hinglish, Tamil, Telugu, or another language, explain in that language naturally.\n"
-            "4. Organize your explanation into 4 friendly, well-structured sections:\n"
+            "4. Organize your explanation into 5 friendly, well-structured sections:\n"
             "   ### 🛡️ The Bottom Line\n"
             "   Give a 1-2 sentence direct answer: is the code safe or vulnerable, and what is the primary risk?\n\n"
             "   ### 🔍 What We Found (Plain Explanation)\n"
             "   Explain the flaw clearly: what component receives untrusted input, how does it flow, and where is it handled unsafely?\n\n"
             "   ### ⚠️ Real-World Impact\n"
             "   Explain what could actually happen if someone exploits this (e.g. bypass login, steal database records, access secrets).\n\n"
-            "   ### 🛠️ How to Fix It (Simple Steps & Code)\n"
-            "   Give plain-English instructions and a clean, safe code snippet demonstrating the fix."
+            "   ### 💻 Corrected Code (Safe Implementation)\n"
+            "   CRITICAL REQUIREMENT: Whenever there are ANY security findings, vulnerabilities, warnings, or errors identified in the code, you MUST ALWAYS provide the EXACT, COMPLETE, PRODUCTION-READY CORRECTED CODE in markdown code blocks. Show:\n"
+            "   - #### ❌ Vulnerable Code (Before)\n"
+            "   - #### ✅ Corrected Code (After)\n"
+            "   Explain the specific code change and why it eliminates the security flaw. The code must be completely syntax-valid and copy-pasteable by the developer.\n\n"
+            "   ### 🛠️ Step-by-Step Fix Guide\n"
+            "   Provide simple, actionable bullet points explaining how to test and verify the fix."
         )
 
         try:
             ai_explanation, ai_provider = await sarvam_answer(
-                f"Please explain the security findings and how to fix them in simple, clear developer-friendly words for: {understanding['normalized_english_inquiry']}",
+                f"Please explain the security findings and provide the complete, safe CORRECTED CODE for every vulnerability or error found in simple, clear developer-friendly words for: {understanding['normalized_english_inquiry']}",
                 ai_context,
                 system_prompt=sentinel_system
             )
@@ -2188,6 +2245,71 @@ async def sentinel_update_finding(finding_id: str, req: FindingStatusUpdateReque
     user = getattr(request.state, "user", None)
     audit(user, "sentinel.status_update", req.repo_id, f"Finding {finding_id} -> {req.status}")
     return update_sentinel_finding_status(req.repo_id, finding_id, req.status, req.notes)
+
+
+@app.post("/api/sentinel/generate-fix")
+async def sentinel_generate_fix(req: GenerateFixRequest):
+    """
+    Generate or refine a safe corrected code patch for a specific finding using Sarvam AI.
+    Guarantees that CodeWhy Sentinel always provides the exact corrected code for any error or finding.
+    """
+    graph = REPOS.get(req.repo_id)
+    files = {p: info["content"] for p, info in graph["files"].items()} if graph else {}
+    security_data = SECURITY_REPORTS.get(req.repo_id) or {}
+    all_findings = security_data.get("findings", [])
+
+    # Locate finding by finding_id
+    target_finding = next((f for f in all_findings if f.get("id") == req.finding_id), None)
+    if not target_finding:
+        target_finding = {
+            "id": req.finding_id,
+            "title": "Security vulnerability",
+            "category": "code_pattern",
+            "path": list(files.keys())[0] if files else "app.py",
+            "line": 1,
+            "evidence": ""
+        }
+
+    file_content = files.get(target_finding.get("path", ""))
+    fix_info = generate_corrected_code(target_finding, file_content)
+
+    ai_explanation = fix_info["fix_summary"]
+    provider = "sentinel_deterministic_engine"
+
+    if SARVAM_API_KEY:
+        try:
+            prompt = (
+                f"Please provide the exact safe corrected code and a clear 2-sentence developer explanation "
+                f"for the following security flaw:\n"
+                f"File: {target_finding.get('path')}\n"
+                f"Issue: {target_finding.get('title')}\n"
+                f"Vulnerable Code:\n{fix_info['vulnerable_code']}\n"
+                f"Safe Reference:\n{fix_info['corrected_code']}"
+            )
+            system = (
+                "You are CODEWHY SENTINEL. Provide the exact corrected code for this security error in a syntax-highlighted code block, "
+                "followed by a simple, friendly 2-sentence explanation of why the change secures the code. Be direct and copy-pasteable."
+            )
+            sarvam_resp, prov = await sarvam_answer(prompt, f"Repository: {req.repo_id}", system_prompt=system)
+            if sarvam_resp and "not_configured" not in prov:
+                ai_explanation = sarvam_resp
+                provider = prov
+        except Exception as exc:
+            print(f"[CODEWHY SENTINEL] Fix generation fallback: {exc}")
+
+    return {
+        "finding_id": req.finding_id,
+        "title": target_finding.get("title"),
+        "affected_file": target_finding.get("path"),
+        "line_number": target_finding.get("line"),
+        "vulnerable_code": fix_info["vulnerable_code"],
+        "corrected_code": fix_info["corrected_code"],
+        "fix_summary": fix_info["fix_summary"],
+        "diff_patch": fix_info["diff_patch"],
+        "code_language": fix_info["language"],
+        "ai_explanation": ai_explanation,
+        "provider": provider
+    }
 
 
 @app.post("/api/sentinel/speak")

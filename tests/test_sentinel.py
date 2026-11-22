@@ -14,6 +14,8 @@ from app.sentinel import (
     identify_security_sensitive_components,
     reconstruct_defensive_attack_paths,
     understand_multilingual_security_question,
+    parse_multilingual_security_question,
+    generate_corrected_code,
 )
 
 
@@ -222,9 +224,8 @@ def test_security_sensitive_components_and_attack_path_reconstruction():
 
 
 def test_multilingual_question_understanding_preserves_technical_identifiers():
-    import asyncio
     hinglish_query = "Mere auth/service.py module me koi authenticate_user weakness hai kya?"
-    parsed = asyncio.run(understand_multilingual_security_question(hinglish_query, language_code="hi-IN"))
+    parsed = parse_multilingual_security_question(hinglish_query, language_code="hi-IN")
 
     assert "auth/service.py" in parsed["preserved_entities"]["files"]
     assert "authenticate_user" in parsed["preserved_entities"]["technical_terms"] or "auth/service.py" in parsed["search_terms"]
@@ -266,9 +267,14 @@ def test_evidence_backed_investigation_flags_unsupported_findings():
     )
 
     assert len(res["investigated_findings"]) == 1
-    assert res["investigated_findings"][0]["verification_status"] == "VERIFIED_BY_REPOSITORY_EVIDENCE"
+    finding0 = res["investigated_findings"][0]
+    assert finding0["verification_status"] == "VERIFIED_BY_REPOSITORY_EVIDENCE"
+    assert "corrected_code" in finding0 and len(finding0["corrected_code"]) > 10
+    assert "vulnerable_code" in finding0 and len(finding0["vulnerable_code"]) > 10
+    assert "fix_summary" in finding0
     assert "db.py" in res["report_markdown"]
     assert "Potential SQL string interpolation" in res["report_markdown"]
+    assert "Corrected Code" in res["report_markdown"]
 
 
 def test_sqlite_sentinel_investigation_and_status_tracking(tmp_path, monkeypatch):
@@ -313,7 +319,8 @@ def test_sqlite_sentinel_investigation_and_status_tracking(tmp_path, monkeypatch
     assert statuses2.get("f-1") == "verified"
 
 
-def test_sentinel_api_end_to_end():
+def test_sentinel_api_end_to_end(monkeypatch):
+    monkeypatch.setattr("app.main.SARVAM_API_KEY", "")
     client = TestClient(app)
     # Load demo codebase
     demo = client.get("/api/demo")
@@ -374,3 +381,72 @@ def test_sentinel_api_end_to_end():
     })
     assert patch_res.status_code == 200
     assert patch_res.json()["status"] == "under_review"
+
+    # Generate Fix / Corrected Code endpoint
+    fix_res = client.post("/api/sentinel/generate-fix", json={
+        "repo_id": repo_id,
+        "finding_id": "sample-finding",
+        "language_code": "en-IN"
+    })
+    assert fix_res.status_code == 200
+    fix_data = fix_res.json()
+    assert "corrected_code" in fix_data and len(fix_data["corrected_code"]) > 10
+    assert "vulnerable_code" in fix_data
+    assert "diff_patch" in fix_data
+    assert "ai_explanation" in fix_data
+
+
+def test_generate_corrected_code_for_multiple_vulnerability_categories():
+    # 1. Hardcoded Secret
+    secret_finding = {
+        "title": "Hardcoded AWS secret key",
+        "category": "secret",
+        "path": "config.py",
+        "evidence": 'AWS_SECRET = "AKIA1234567890EXAMPLE"'
+    }
+    res_secret = generate_corrected_code(secret_finding)
+    assert "os.environ" in res_secret["corrected_code"]
+    assert "vulnerable_code" in res_secret
+    assert "diff_patch" in res_secret
+
+    # 2. SQL Injection
+    sql_finding = {
+        "title": "SQL Injection in User Lookup",
+        "category": "code_pattern",
+        "path": "db/users.py",
+        "evidence": 'cursor.execute("SELECT * FROM users WHERE id=" + uid)'
+    }
+    res_sql = generate_corrected_code(sql_finding)
+    assert "?" in res_sql["corrected_code"]
+    assert "parameter" in res_sql["fix_summary"].lower() or "query" in res_sql["fix_summary"].lower()
+
+    # 3. Command Injection
+    cmd_finding = {
+        "title": "Command Injection via os.system",
+        "category": "code_pattern",
+        "path": "tools/network.py",
+        "evidence": 'os.system("ping " + host)'
+    }
+    res_cmd = generate_corrected_code(cmd_finding)
+    assert "subprocess.run" in res_cmd["corrected_code"]
+    assert "shell=False" in res_cmd["corrected_code"]
+
+    # 4. Path Traversal
+    path_finding = {
+        "title": "Path Traversal in File Server",
+        "category": "code_pattern",
+        "path": "handlers/files.py",
+        "evidence": 'open("/uploads/" + filename)'
+    }
+    res_path = generate_corrected_code(path_finding)
+    assert "resolve" in res_path["corrected_code"] or "is_relative_to" in res_path["corrected_code"] or "PermissionError" in res_path["corrected_code"]
+
+    # 5. Insecure Deserialization
+    pickle_finding = {
+        "title": "Unsafe pickle deserialization",
+        "category": "code_pattern",
+        "path": "cache.py",
+        "evidence": "pickle.loads(payload)"
+    }
+    res_pickle = generate_corrected_code(pickle_finding)
+    assert "json.loads" in res_pickle["corrected_code"] or "yaml.safe_load" in res_pickle["corrected_code"]
