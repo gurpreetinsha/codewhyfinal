@@ -55,3 +55,15 @@ def test_anonymous_repository_workspaces_are_isolated():
     path = "/api/repos/" + first_repo + "/graph"
     assert first_client.get(path).status_code == 200
     assert second_client.get(path).status_code == 404
+
+
+def test_graph_view_returns_all_nodes_and_relationships():
+    from app.main import graph_view
+
+    graph = build_graph("owner/repo", {
+        f"module_{i}.py": f"def function_{i}():\\n    return {i}\\n"
+        for i in range(190)
+    })
+    view = graph_view(graph)
+    assert len(view["nodes"]) == len(graph["nodes"])
+    assert len(view["edges"]) == len(graph["edges"])
