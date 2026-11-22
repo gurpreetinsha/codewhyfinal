@@ -1177,6 +1177,196 @@ async def get_impact(repo_id: str, req: ImpactRequest):
         raise HTTPException(404, "Repository not found")
     return impact_report(graph, req.path)
 
+
+
+class CodeHelperAnalyzeRequest(BaseModel):
+    repo_id: str = Field(min_length=1, max_length=300)
+    path: str = Field(min_length=1, max_length=500)
+    focus: str = Field(default="Find correctness bugs, edge cases, security issues and maintainability improvements.", max_length=1500)
+
+
+class CodeHelperCommitRequest(BaseModel):
+    repo_id: str = Field(min_length=1, max_length=300)
+    path: str = Field(min_length=1, max_length=500)
+    content: str = Field(min_length=1, max_length=180000)
+    message: str = Field(min_length=5, max_length=200)
+    branch: str | None = Field(default=None, max_length=200)
+
+
+def _sentinel_repo_for_user(repo_id: str, request: Request) -> dict[str, Any]:
+    graph = REPOS.get(repo_id)
+    if not graph:
+        raise HTTPException(404, "Repository not found. Scan it first.")
+    user = getattr(request.state, "user", None)
+    owner = REPO_OWNERS.get(repo_id)
+    if owner and owner.startswith("anon:"):
+        if user or owner != "anon:" + getattr(request.state, "anonymous_id", ""):
+            raise HTTPException(403, "Repository access denied.")
+    elif owner and owner != "anonymous":
+        if not user or owner.lower() != user["login"].lower():
+            raise HTTPException(403, "Repository access denied.")
+    return graph
+
+
+@app.post("/api/sentinel/code-helper/analyze")
+async def sentinel_code_helper_analyze(req: CodeHelperAnalyzeRequest, request: Request):
+    """Review one scanned source file and propose a complete safer replacement."""
+    graph = _sentinel_repo_for_user(req.repo_id, request)
+    info = graph["files"].get(req.path)
+    if not info:
+        raise HTTPException(404, "File not found in the scanned repository.")
+    source = info["content"]
+    if len(source) > 45000:
+        raise HTTPException(413, "This file is too large for one review. Choose a smaller file.")
+    redacted = redact_source(source)
+    static_signals = []
+    if PurePosixPath(req.path).suffix.lower() == ".py":
+        try:
+            ast.parse(source)
+        except SyntaxError as exc:
+            static_signals.append({
+                "severity": "high", "category": "syntax",
+                "line": exc.lineno, "title": "Python syntax error",
+                "detail": exc.msg
+            })
+    for finding in scan_source({req.path: source})[:25]:
+        static_signals.append({
+            "severity": finding.get("severity", "medium"),
+            "category": finding.get("category", "static"),
+            "line": finding.get("line"),
+            "title": finding.get("title", "Static analysis signal"),
+            "detail": finding.get("recommendation") or finding.get("evidence") or ""
+        })
+    prompt = """You are CODEWHY SENTINEL CODE HELPER, a senior software engineer and careful code reviewer.
+Review only the supplied file and repository metadata. Identify real bugs, incorrect logic, edge cases, security issues and meaningful maintainability improvements. Do not invent issues. Clearly distinguish definite bugs from suggestions.
+Return exactly these sections:
+## Summary
+## Issues
+For each issue include severity (critical/high/medium/low), line number (or unknown), why it is a problem, and a concrete consequence.
+## Improved Code
+Provide one complete replacement file inside a single fenced code block using the correct language. Preserve existing behaviour unless changing it fixes a clearly explained bug. Do not use placeholders or omit unrelated sections.
+## Tests to Run
+List specific tests or checks. Never claim they were executed.
+If no worthwhile issues exist, say so and still provide the unchanged file as the replacement.
+Do not include secrets or reproduce redacted values."""
+    context = (
+        f"FILE PATH: {req.path}\nFOCUS: {req.focus}\n"
+        f"LANGUAGE: {info.get('language', 'unknown')}\n"
+        f"STATIC CHECK SIGNALS: {json.dumps(static_signals)}\n"
+        f"FILE CONTENT (sensitive values redacted):\n{redacted[:45000]}"
+    )
+    review, provider = await sarvam_answer(
+        f"Review this source file and return issues plus a complete improved replacement. Focus: {req.focus}",
+        context,
+        system_prompt=prompt
+    )
+    replacement_match = re.search(r"```(?:[A-Za-z0-9_+.-]+)?\s*\n([\s\S]*?)\n```", review)
+    replacement = replacement_match.group(1) if replacement_match else ""
+    if not replacement:
+        raise HTTPException(502, "The code reviewer did not return a complete fenced replacement file. Try again with a smaller file.")
+    # Reject accidental truncation/placeholder output rather than offering it as a ready-to-commit fix.
+    if re.search(r"(?im)^\s*(\.\.\.|#\s*rest of (the )?code|//\s*rest of (the )?code|TODO:\s*implement)", replacement):
+        raise HTTPException(502, "The proposed replacement appears incomplete. Narrow the review focus and retry.")
+    audit(getattr(request.state, "user", None), "sentinel.code_helper.analyze", req.repo_id, req.path)
+    return {
+        "repo_id": req.repo_id, "path": req.path, "language": info.get("language", "text"),
+        "review": review, "replacement": replacement, "static_signals": static_signals,
+        "provider": provider,
+        "original_sha256": hashlib.sha256(source.encode()).hexdigest(),
+        "disclaimer": "AI-generated changes are suggestions. Review the diff and run your tests before committing."
+    }
+
+
+@app.post("/api/sentinel/code-helper/commit")
+async def sentinel_code_helper_commit(req: CodeHelperCommitRequest, request: Request):
+    """Commit a user-approved reviewed replacement to a new GitHub branch."""
+    graph = _sentinel_repo_for_user(req.repo_id, request)
+    user = getattr(request.state, "user", None)
+    if not user or not user.get("access_token"):
+        raise HTTPException(401, "Sign in with GitHub to commit changes.")
+    if REPO_OWNERS.get(req.repo_id, "").lower() != user["login"].lower():
+        raise HTTPException(403, "Only the authenticated owner of this scanned workspace can commit.")
+    if graph.get("metadata", {}).get("demo"):
+        raise HTTPException(400, "Demo repositories cannot be committed.")
+    full_name = graph.get("metadata", {}).get("full_name", "")
+    match = re.fullmatch(r"([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)", full_name)
+    if not match:
+        raise HTTPException(400, "The scanned repository metadata is invalid.")
+    owner, repo = match.groups()
+    path = req.path.strip("/")
+    if not path or any(part in {"", ".", ".."} for part in path.split("/")) or "\\" in path or "\x00" in path:
+        raise HTTPException(400, "Invalid repository file path.")
+    current = graph["files"].get(path)
+    if not current:
+        raise HTTPException(404, "The selected file is not part of the scanned snapshot.")
+    default_branch = graph["metadata"].get("default_branch") or "main"
+    branch = req.branch or f"codewhy/fix-{int(time.time())}"
+    if not re.fullmatch(r"[A-Za-z0-9._/-]{1,200}", branch) or branch.startswith("/") or branch.endswith("/") or ".." in branch:
+        raise HTTPException(400, "Invalid branch name.")
+    headers = {
+        "Authorization": f"Bearer {user['access_token']}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    async with httpx.AsyncClient(timeout=35, headers=headers) as client:
+        meta_resp = await client.get(f"https://api.github.com/repos/{owner}/{repo}")
+        if meta_resp.status_code >= 400:
+            raise HTTPException(meta_resp.status_code, "Could not verify repository access with GitHub.")
+        meta = meta_resp.json()
+        if meta.get("full_name", "").lower() != full_name.lower():
+            raise HTTPException(409, "Repository identity changed since the scan.")
+        # Check that the file has not changed since it was scanned.
+        file_resp = await client.get(
+            f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
+            params={"ref": default_branch}
+        )
+        if file_resp.status_code >= 400:
+            raise HTTPException(file_resp.status_code, "Could not verify the current file on the default branch.")
+        file_data = file_resp.json()
+        if file_data.get("type") != "file":
+            raise HTTPException(400, "The selected path is not a regular file.")
+        import base64
+        try:
+            live_content = base64.b64decode(file_data.get("content", "")).decode("utf-8")
+        except Exception:
+            raise HTTPException(422, "GitHub could not provide this file as UTF-8 text.")
+        if hashlib.sha256(live_content.encode()).hexdigest() != hashlib.sha256(current["content"].encode()).hexdigest():
+            raise HTTPException(409, "This file changed on GitHub after the scan. Rescan the repository before committing.")
+        # Create an isolated branch from the current default branch.
+        ref_resp = await client.get(f"https://api.github.com/repos/{owner}/{repo}/git/ref/heads/{default_branch}")
+        if ref_resp.status_code >= 400:
+            raise HTTPException(ref_resp.status_code, "Could not read the current default branch.")
+        base_sha = ref_resp.json()["object"]["sha"]
+        create_branch = await client.post(
+            f"https://api.github.com/repos/{owner}/{repo}/git/refs",
+            json={"ref": f"refs/heads/{branch}", "sha": base_sha}
+        )
+        if create_branch.status_code >= 400:
+            if create_branch.status_code == 422:
+                raise HTTPException(409, "That fix branch already exists. Choose another branch name.")
+            raise HTTPException(create_branch.status_code, "Could not create the fix branch.")
+        # Commit the proposed replacement on the new branch only.
+        encoded = base64.b64encode(req.content.encode()).decode()
+        update_resp = await client.put(
+            f"https://api.github.com/repos/{owner}/{repo}/contents/{path}",
+            json={
+                "message": req.message,
+                "content": encoded,
+                "branch": branch,
+                "sha": file_data["sha"]
+            }
+        )
+        if update_resp.status_code >= 400:
+            raise HTTPException(update_resp.status_code, "GitHub created the fix branch but could not commit the file. The default branch is unchanged.")
+        commit_sha = update_resp.json().get("commit", {}).get("sha")
+        commit_url = update_resp.json().get("commit", {}).get("html_url")
+    audit(user, "sentinel.code_helper.commit", req.repo_id, f"{path} -> {branch}")
+    return {
+        "success": True, "branch": branch, "commit_sha": commit_sha,
+        "commit_url": commit_url, "path": path,
+        "pull_request_url": f"https://github.com/{owner}/{repo}/compare/{default_branch}...{branch}?expand=1"
+    }
+
 async def sarvam_answer(question: str, context: str, system_prompt: str | None = None) -> tuple[str, str]:
     if not SARVAM_API_KEY:
         return ("Sarvam AI is not configured yet. Add SARVAM_API_KEY to your deployment environment to enable live answers. The repository evidence is ready and shown alongside this response.", "not_configured")
