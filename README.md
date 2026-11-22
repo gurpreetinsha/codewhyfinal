@@ -36,6 +36,15 @@ CODEWHY is an AI engineering-intelligence and repository-security workspace. It 
 - **Static risky-pattern checks:** Dynamic execution, pickle deserialization, shell execution, disabled TLS verification, unsafe YAML loading, weak hash primitives, SQL interpolation, and wildcard CORS.
 - **Dependency inventory & OSV advisories:** Direct integration with OSV database for pinned requirements, npm manifests, Poetry/uv, Cargo, and Go sum lockfiles.
 
+### Sentinel Code Helper
+- Select any file from the currently scanned GitHub repository and request a focused code review.
+- Combines existing static security-pattern signals with a Sarvam-powered review for correctness, edge cases, security and maintainability.
+- Returns issue explanations and a complete suggested replacement file. The replacement stays editable in the browser.
+- Shows an approximate diff before the developer explicitly confirms the commit.
+- Commits the reviewed replacement to a newly created `codewhy/*` branch, never directly to the default branch. The helper checks the live file against the scanned snapshot to avoid committing over concurrent changes, and provides a GitHub compare link to open a pull request.
+- Requires GitHub sign-in and write permission for the repository. Demo workspaces cannot be committed. The source file is not sent to the model when local secret redaction detects credential-like values; remove or rotate secrets before requesting an AI replacement.
+- Suggested code is not automatically tested. Review it and run the project checks before opening or merging a pull request.
+
 ### AI investigation and change review
 - Ask your codebase using Sarvam Chat Completions.
 - Autonomous Investigator with retrieval, graph expansion, evidence references, investigation steps and a traceability status.
