@@ -188,6 +188,67 @@ async def check_osv(dependencies: list[dict[str, str]]) -> tuple[list[dict[str, 
                     })
     return vulnerabilities, skipped
 
+def estimate_business_impact(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Illustrative loss scenarios for a small online business; not actuarial predictions."""
+    daily_revenue_inr = 50000
+    downtime_hours = 8
+    incident_response_inr = 100000
+    customer_records = 1000
+    avg_customer_value_inr = 500
+    severity_factors = {
+        "critical": (0.70, 2.50),
+        "high": (0.35, 1.50),
+        "medium": (0.12, 0.65),
+        "low": (0.03, 0.20),
+    }
+    estimated = []
+    total_low = total_high = 0
+    for finding in findings:
+        severity = str(finding.get("severity", "medium")).lower()
+        low_factor, high_factor = severity_factors.get(severity, severity_factors["medium"])
+        title = str(finding.get("title", "")).lower()
+        category = str(finding.get("category", "")).lower()
+        data_or_credential_risk = (
+            category in {"secret", "dependency"} or
+            any(term in title for term in ("sql", "deserial", "execution", "shell", "credential", "token", "password", "cors"))
+        )
+        outage_base = daily_revenue_inr * downtime_hours / 24
+        response_base = incident_response_inr
+        exposure_base = customer_records * avg_customer_value_inr if data_or_credential_risk else 0
+        scenario_base = outage_base + response_base + exposure_base
+        low = round(scenario_base * low_factor)
+        high = round(scenario_base * high_factor)
+        total_low += low
+        total_high += high
+        estimated.append({
+            "id": finding.get("id"),
+            "loss_low_inr": low,
+            "loss_high_inr": high,
+            "impact_drivers": (["customer/data exposure"] if data_or_credential_risk else []) + ["incident response", "business downtime"],
+            "estimate_type": "illustrative_scenario",
+        })
+    return {
+        "currency": "INR",
+        "total_loss_low_inr": total_low,
+        "total_loss_high_inr": total_high,
+        "findings": estimated,
+        "assumptions": {
+            "business_profile": "Starter small-online-business scenario; replace with your actual figures before using for decisions.",
+            "daily_revenue_inr": daily_revenue_inr,
+            "downtime_hours": downtime_hours,
+            "incident_response_inr": incident_response_inr,
+            "customer_records": customer_records,
+            "average_customer_value_inr": avg_customer_value_inr,
+            "method": "Severity-weighted scenario multipliers applied to assumed downtime, response, and (where relevant) data/credential exposure costs.",
+        },
+        "limitations": [
+            "These are illustrative scenario ranges, not forecasts, insurance valuations, or guaranteed losses.",
+            "Multiple findings may describe the same attack path; summing their ranges can double-count correlated incidents.",
+            "Actual impact depends on exploitability, controls, business size, jurisdiction, and recovery capability.",
+        ],
+    }
+
+
 async def security_report(files: dict[str, str]) -> dict[str, Any]:
     code_findings = scan_source(files)
     dependencies = parse_dependencies(files)
@@ -209,4 +270,5 @@ async def security_report(files: dict[str, str]) -> dict[str, Any]:
         "dependency_inventory": dependencies,
         "osv_unavailable_for": skipped,
         "methodology": "Static pattern checks and OSV advisories for exact versions detected in supported manifests. Findings require human review; absence of findings is not proof of security.",
+        "business_impact": estimate_business_impact(findings),
     }
