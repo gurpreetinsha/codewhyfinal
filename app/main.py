@@ -225,7 +225,7 @@ def persist_graph(graph: dict[str, Any]) -> None:
         return
     repo_id = graph["id"]
     files = [n for n in graph["nodes"] if n["type"] == "file"]
-    symbols = [n for n in graph["nodes"] if n["type"] != "file"]
+    symbols = [n for n in graph["nodes"] if n["type"] in {"function", "class"}]
     edges = [e for e in graph["edges"] if e["type"] in {"IMPORTS", "CALLS"}]
 
     with driver.session(database=NEO4J_DATABASE) as session:
