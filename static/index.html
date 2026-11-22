@@ -985,7 +985,7 @@ async function scanRepository(fullName,button){
   finally{button.disabled=false;button.textContent=prior}
 }
 function render(d){state.id=d.id;state.repo=d.repository;state.graph=d.repository;state.debt=d.debt||[];const s=d.repository.stats;$('s-files').textContent=s.files;$('s-functions').textContent=s.functions;$('s-edges').textContent=d.repository.edges.length;$('s-debt').textContent=state.debt.length;$('repo-name').textContent=d.repository.metadata.full_name||d.id;$('graph-count').textContent=(d.storage==='neo4j'?'NEO4J · ':'GRAPH · ')+d.repository.nodes.length+' NODES · '+d.repository.edges.length+' EDGES';$('debt-count').textContent=state.debt.length+' SIGNALS';$('file-count').textContent=s.files+' FILES';$('file-list').innerHTML=Object.keys(d.repository.metadata.files||{}).map(x=>'').join('')||'';
-renderGraph(d.repository);renderDebt();renderFiles();$('answer').innerHTML='';loadSentinelRepos();}
+renderGraph(d.repository);renderDebt();renderFiles();$('answer').innerHTML='';refreshSentinelCodeFiles();loadSentinelRepos();}
 function renderGraph(g){
   const el=$('graph'),w=el.clientWidth||600,h=480,nodes=g.nodes||[],edges=g.edges||[];
   if(!nodes.length){el.innerHTML='<div class="empty">No graph nodes yet. Scan a repository to begin.</div>';return}
@@ -1140,7 +1140,7 @@ async function commitSentinelCodeFix(){
 }
 
 async function loadSentinelLanguages(){try{const d=await api('/api/sentinel/languages');const sel=$('sentinel-language');if(sel&&d.languages)sel.innerHTML=d.languages.map(l=>`<option value="${esc(l.code)}">${esc(l.name)}</option>`).join('')}catch(e){console.warn(e)}}
-async function loadSentinelRepos(){try{const d=await api('/api/sentinel/repos');const sel=$('sentinel-repo-select');if(sel&&d.repositories){sel.innerHTML=d.repositories.map(r=>`<option value="${esc(r.id)}" ${r.id===state.id?'selected':''}>${esc(r.name||r.id)}</option>`).join('')}}catch(e){console.warn(e)}}
+async function loadSentinelRepos(){try{const d=await api('/api/sentinel/repos');const sel=$('sentinel-repo-select');if(sel&&d.repositories){sel.innerHTML=d.repositories.map(r=>`<option value="${esc(r.id)}" ${r.id===state.id?'selected':''}>${esc(r.name||r.id)}</option>`).join('');refreshSentinelCodeFiles()}}catch(e){console.warn(e)}}
 
 async function toggleSentinelRecording(){
   if(state.sentinel.recording){state.sentinel.recorder.stop();return}
