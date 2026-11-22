@@ -1056,6 +1056,89 @@ async function speakAnswer(){const text=$('answer').innerText.trim();if(!text)re
 $('refresh-repos-btn')?.addEventListener('click',loadGitHubRepos);$('repo-nav').addEventListener('click',()=>{$('repo-url').scrollIntoView({behavior:'smooth',block:'center'});$('repo-url').focus()});$('scan-btn').addEventListener('click',scan);$('security-btn').addEventListener('click',runSecurity);$('security-history-btn').addEventListener('click',loadSecurityHistory);$('investigate-btn').addEventListener('click',investigate);$('pr-btn').addEventListener('click',reviewPR);$('change-btn').addEventListener('click',simulateChange);$('history-btn').addEventListener('click',loadHistory);$('audit-btn').addEventListener('click',loadAudit);$('report-btn').addEventListener('click',exportReport);$('record-btn').addEventListener('click',toggleRecording);$('speak-btn').addEventListener('click',speakAnswer);$('ask-btn').addEventListener('click',ask);$('question').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});$('repo-url').addEventListener('keydown',e=>{if(e.key==='Enter')scan()});$('demo-btn').addEventListener('click',loadDemo);$('modal-close').addEventListener('click',()=>$('file-modal').classList.remove('open'));$('file-modal').addEventListener('click',e=>{if(e.target===$('file-modal'))$('file-modal').classList.remove('open')});
 
 /* ==================== CODEWHY SENTINEL ENGINE ==================== */
+
+let sentinelCodeHelperResult=null;
+let sentinelCodeOriginal='';
+function refreshSentinelCodeFiles(){
+  const sel=$('sentinel-code-file');
+  if(!sel)return;
+  const files=state.graph?.files||{};
+  const paths=Object.keys(files).sort();
+  const previous=sel.value;
+  sel.innerHTML=paths.length?paths.map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join(''):'<option value="">Scan a repository first</option>';
+  if(paths.includes(previous))sel.value=previous;
+  $('sentinel-code-status').textContent=paths.length?paths.length+' source files available · '+(state.repo?.full_name||state.id||''):'Scan a repository to choose a file.';
+}
+function sentinelCodeDiff(before,after){
+  const a=String(before).split('\n'),b=String(after).split('\n');
+  let start=0;while(start<a.length&&start<b.length&&a[start]===b[start])start++;
+  let endA=a.length-1,endB=b.length-1;
+  while(endA>=start&&endB>=start&&a[endA]===b[endB]){endA--;endB--}
+  const out=['--- a/'+($('sentinel-code-file')?.value||'file'),'+++ b/'+($('sentinel-code-file')?.value||'file'),'@@ changed section ('+(start+1)+'..'+(endA+1)+') @@'];
+  a.slice(start,endA+1).forEach(x=>out.push('-'+x));
+  b.slice(start,endB+1).forEach(x=>out.push('+'+x));
+  return out.join('\n');
+}
+function renderSentinelCodeDiff(){
+  if(!sentinelCodeHelperResult)return;
+  const next=$('sentinel-code-replacement').value;
+  const diff=sentinelCodeDiff(sentinelCodeOriginal,next);
+  $('sentinel-code-diff').textContent=diff;
+  const removed=(diff.match(/^- /gm)||[]).length+(diff.match(/^-[^-]/gm)||[]).length;
+  const added=(diff.match(/^\+/gm)||[]).length-1;
+  $('sentinel-code-diff-summary').textContent='Approx. '+Math.max(0,added)+' additions · '+removed+' removals';
+}
+async function runSentinelCodeReview(){
+  const repoId=$('sentinel-repo-select')?.value||state.id;
+  const path=$('sentinel-code-file')?.value;
+  if(!repoId)return toast('Scan a repository first');
+  if(!path)return toast('Choose a source file');
+  const b=$('sentinel-code-review-btn');
+  setLoading(b,true);b.textContent='Reviewing…';
+  $('sentinel-code-status').textContent='Checking syntax and security signals, then requesting an AI code review…';
+  $('sentinel-code-review').style.display='none';
+  $('sentinel-code-commit-status').textContent='';
+  $('sentinel-code-confirm').checked=false;
+  $('sentinel-code-commit-btn').disabled=true;
+  try{
+    const d=await api('/api/sentinel/code-helper/analyze',{method:'POST',body:JSON.stringify({
+      repo_id:repoId,path,focus:$('sentinel-code-focus').value.trim()
+    })});
+    sentinelCodeHelperResult=d;
+    sentinelCodeOriginal=state.graph?.files?.[path]?.content||'';
+    $('sentinel-code-review-text').innerHTML=renderSentinelMarkdown(d.review);
+    $('sentinel-code-replacement').value=d.replacement;
+    $('sentinel-code-review').style.display='block';
+    const branch='codewhy/fix-'+path.split('/').pop().replace(/[^A-Za-z0-9._-]/g,'-').replace(/\.[^.]+$/,'')+'-'+Date.now().toString(36);
+    $('sentinel-code-branch').value=branch.slice(0,190);
+    renderSentinelCodeDiff();
+    $('sentinel-code-status').textContent='Review ready · '+d.provider+' · '+d.static_signals.length+' static signals';
+    $('sentinel-code-review').scrollIntoView({behavior:'smooth',block:'nearest'});
+  }catch(e){$('sentinel-code-status').textContent=e.message;toast('Code review failed: '+e.message)}
+  finally{setLoading(b,false);b.textContent='Review selected file →'}
+}
+async function commitSentinelCodeFix(){
+  if(!sentinelCodeHelperResult)return;
+  if(!$('sentinel-code-confirm').checked)return toast('Review the diff and confirm before committing');
+  const content=$('sentinel-code-replacement').value;
+  if(!content.trim())return toast('Replacement code cannot be empty');
+  if(content.length>180000)return toast('Replacement is too large to commit via this helper');
+  const b=$('sentinel-code-commit-btn');
+  setLoading(b,true);b.textContent='Committing…';
+  $('sentinel-code-commit-status').textContent='Verifying the live GitHub file and creating an isolated branch…';
+  try{
+    const d=await api('/api/sentinel/code-helper/commit',{method:'POST',body:JSON.stringify({
+      repo_id:sentinelCodeHelperResult.repo_id,path:sentinelCodeHelperResult.path,content,
+      message:$('sentinel-code-commit-message').value.trim(),
+      branch:$('sentinel-code-branch').value.trim()||null
+    })});
+    $('sentinel-code-commit-status').innerHTML='Committed to <strong>'+esc(d.branch)+'</strong> · <a href="'+esc(d.commit_url||'#')+'" target="_blank" rel="noopener">View commit</a> · <a href="'+esc(d.pull_request_url)+'" target="_blank" rel="noopener">Open pull request</a>';
+    $('sentinel-code-confirm').checked=false;
+    toast('Approved fix committed to a new branch');
+  }catch(e){$('sentinel-code-commit-status').textContent=e.message;toast('Commit failed: '+e.message)}
+  finally{setLoading(b,false);b.textContent='Commit approved fix to new branch →'}
+}
+
 async function loadSentinelLanguages(){try{const d=await api('/api/sentinel/languages');const sel=$('sentinel-language');if(sel&&d.languages)sel.innerHTML=d.languages.map(l=>`<option value="${esc(l.code)}">${esc(l.name)}</option>`).join('')}catch(e){console.warn(e)}}
 async function loadSentinelRepos(){try{const d=await api('/api/sentinel/repos');const sel=$('sentinel-repo-select');if(sel&&d.repositories){sel.innerHTML=d.repositories.map(r=>`<option value="${esc(r.id)}" ${r.id===state.id?'selected':''}>${esc(r.name||r.id)}</option>`).join('')}}catch(e){console.warn(e)}}
 
