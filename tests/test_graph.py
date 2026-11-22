@@ -61,7 +61,7 @@ def test_graph_view_returns_all_nodes_and_relationships():
     from app.main import graph_view
 
     graph = build_graph("owner/repo", {
-        f"module_{i}.py": f"def function_{i}():\\n    return {i}\\n"
+        f"module_{i}.py": f"def function_{i}():\n    return {i}\n"
         for i in range(190)
     })
     view = graph_view(graph)
@@ -75,8 +75,8 @@ def test_architecture_graph_includes_repository_files_symbols_and_all_relationsh
     graph = build_graph(
         "owner/project",
         {
-            "main.py": "from helpers import run\\nclass App:\\n    pass\\ndef main():\\n    return run()\\n",
-            "helpers.py": "def run():\\n    return True\\n",
+            "main.py": "from helpers import run\nclass App:\n    pass\ndef main():\n    return run()\n",
+            "helpers.py": "def run():\n    return True\n",
         },
         {"full_name": "owner/project"},
     )
